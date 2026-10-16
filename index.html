@@ -438,7 +438,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 p'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 q'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -726,7 +726,13 @@ dd.none{color:var(--muted)}
 
     // Doors on top of every wall, so a neighbour's wall never covers a door gap.
     LEVELS.forEach(function (L) { doorLayers[L.id] = el('g', { 'class': 'doors', 'aria-hidden': 'true' }, base[L.id]); });
-    ROOMS.forEach(function (r) { (r.doors || []).forEach(function (d) { drawDoor(doorLayers[lv(r)], r.shape, d, 22); }); });
+    // Small offices get a smaller door, so the swing does not take over the room.
+    ROOMS.forEach(function (r) {
+      var xs = (r.shape || []).map(function (p) { return p[0]; }), ys = (r.shape || []).map(function (p) { return p[1]; });
+      var side = xs.length ? Math.min(Math.max.apply(null, xs) - Math.min.apply(null, xs), Math.max.apply(null, ys) - Math.min.apply(null, ys)) : 100;
+      var dw = Math.max(12, Math.min(22, Math.round(side * 0.28)));
+      (r.doors || []).forEach(function (d) { drawDoor(doorLayers[lv(r)], r.shape, d, dw); });
+    });
     // Entrance doorways: a gap in the outside wall of the entrance's own floor.
     ENTRANCES.forEach(function (en) {
       var best = null;
