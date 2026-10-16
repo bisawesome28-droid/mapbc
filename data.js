@@ -12,6 +12,10 @@ window.BUILDING = {
   "level": "Level 1",
   "note": "Simplified schematic. Room IDs are placeholders until real door numbers are added."
 };
+// Map units to real feet, used for the distance and walking-time estimates.
+// This is a rough guess. To fix it: measure one hallway on site (say the south wing main hallway,
+// about 515 map units from the west door to the bridge) and set feetPerUnit to real feet divided by 515.
+window.SCALE = {"feetPerUnit": 0.7, "guess": true};
 window.SHELLS = [[30, 165, 570, 305], [190, 52, 335, 115], [595, 318, 132, 50], [715, 235, 275, 515]];
 window.ROOMS = [
   {"id": "S01", "door": "", "name": "Classroom S01", "type": "classroom", "wing": "South", "label": "S01", "keywords": "", "where": "South wing, top-left corner, tiered seating, left of S02", "near": "", "directions": "", "verified": false, "photo": "", "x": 32, "y": 168, "w": 78, "h": 80, "doors": [[71, 248]]},
@@ -61,7 +65,7 @@ window.ROOMS = [
 window.SPOTS = [
   {"id": "P-LOBBY", "label": "South wing building lobby", "keywords": "lobby main entrance", "photo": "", "verified": false, "x": 447, "y": 430},
   {"id": "P-CAFE-ENT", "label": "South entrance by the cafe", "keywords": "entrance door cafe", "photo": "", "verified": false, "x": 570, "y": 447},
-  {"id": "P-W-DOOR", "label": "West door, south wing (verify on site)", "keywords": "entrance door west", "photo": "", "verified": false, "x": 60, "y": 344},
+  {"id": "P-W-DOOR", "label": "West door, south wing (verify on site)", "keywords": "entrance door west", "photo": "", "verified": false, "x": 84, "y": 344},
   {"id": "P-STAIR-W", "label": "Stair, west-center of south wing", "keywords": "stairs", "photo": "", "verified": false, "x": 215, "y": 335},
   {"id": "P-BRIDGE", "label": "Connector bridge", "keywords": "bridge between wings", "photo": "", "verified": false, "x": 705, "y": 343},
   {"id": "P-N-ELEV", "label": "North wing elevator lobby", "keywords": "elevator lift", "photo": "", "verified": false, "x": 815, "y": 385},

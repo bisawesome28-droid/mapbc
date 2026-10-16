@@ -16,11 +16,19 @@
 - "Show path network" draws every hallway line. Orange dashes = guessed, grey = clear on the brochure.
 - Links like `index.html?from=E-S-WEST&room=S03` open straight to a route (could become QR codes at entrances).
 - The page remembers the last entrance on that device.
+- Turn-by-turn steps ("Turn left toward ...") with distance in feet and a walking-time estimate.
+- "Nearest" buttons (Restrooms, Elevators, Cafe, Advising) pick the closest match from the chosen entrance.
+- Works on phones (pinch to zoom) and has a light/dark switch.
 
 ## Current state
 - Room ids S01-S11 and N01-N08 are placeholders. Do not change "id". Put the real number in "door" (for example "door": "S195"). Search, labels and routes pick it up.
 - The layout is a schematic traced from the Stokes Level 1 brochure. Don't publish the brochure image. It is ignored by git (keep it in reference/).
 - All door positions are guesses. Hallways marked "guess": true need checking on site.
+
+## Map scale (distance and time estimates)
+`window.SCALE` in data.js turns map units into feet. The value (0.7) is a guess. Measure one real hallway,
+for example the south wing main hallway (about 515 map units from the west door to the bridge), and set
+feetPerUnit to real feet divided by 515. Then set "guess" to false. Time assumes an easy 240 feet per minute.
 
 ## Things to check when walking the building
 1. Each room's door position. Edit that room's "doors" in data.js. Each [x, y] is one door.

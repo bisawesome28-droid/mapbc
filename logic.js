@@ -227,11 +227,97 @@
     return shortest(graph, 'entrance:' + entranceId, ends, options);
   }
 
+  // The closest of several possible destinations (for example "nearest restroom").
+  // Returns { target, route } or null.
+  function nearest(graph, entranceId, targets, options) {
+    var best = null;
+    targets.forEach(function (t) {
+      var r = routeTo(graph, entranceId, t, options);
+      if (r && (!best || r.length < best.route.length)) { best = { target: t, route: r }; }
+    });
+    return best;
+  }
+
+  // ---------- Turn-by-turn directions ----------
+
+  var TURN_MIN = 30;       // a bend smaller than this many degrees counts as "straight on"
+  var SHORT_LEG = 10;      // a jog shorter than this (map units) is folded into the leg before it
+  var FEET_PER_MINUTE = 240; // an easy indoor walking pace, about 2.7 mph
+
+  function angleBetween(h1, h2) {
+    // Positive = turning right, negative = turning left. The map's y axis points down.
+    var cross = h1.x * h2.y - h1.y * h2.x, dot = h1.x * h2.x + h1.y * h2.y;
+    return Math.atan2(cross, dot) * 180 / Math.PI;
+  }
+
+  function turnWord(angle) {
+    var a = Math.abs(angle), side = angle > 0 ? 'right' : 'left';
+    if (a < TURN_MIN) { return { turn: 'straight', text: 'Continue straight' }; }
+    if (a > 150) { return { turn: 'around', text: 'Turn around' }; }
+    if (a > 110) { return { turn: 'sharp-' + side, text: 'Make a sharp ' + side }; }
+    return { turn: side, text: 'Turn ' + side };
+  }
+
+  // Turns a route into readable steps.
+  // targetName: what the last step should say you are walking to.
+  // opts.feetPerUnit: map units to feet (data.js SCALE). Returns
+  // { steps: [{ kind, turn, text, feet }], feet, minutes }.
+  function describe(graph, route, targetName, opts) {
+    var fpu = (opts && opts.feetPerUnit) || 1;
+    var nodes = route.ids.map(function (id) { return graph.nodes[id]; });
+    var legs = [];
+    for (var i = 1; i < nodes.length; i++) {
+      var a = nodes[i - 1], b = nodes[i], len = dist(a, b);
+      if (len < 0.5) { continue; }
+      var h = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+      var cur = legs[legs.length - 1];
+      // A short stub (like the few steps from a door to the hallway) absorbs a gentle bend too.
+      var bend = cur ? Math.abs(angleBetween(cur.h, h)) : 0;
+      if (cur && (bend < TURN_MIN || (cur.len < 25 && bend < 60))) {
+        cur.len += len; cur.end = i; cur.h = h;
+      } else {
+        legs.push({ h: h, len: len, start: i - 1, end: i });
+      }
+    }
+    // Fold tiny jogs into the previous leg so you never read "turn left, 3 ft".
+    var kept = [];
+    legs.forEach(function (leg, k) {
+      var edge = k === 0 || k === legs.length - 1;
+      if (!edge && leg.len < SHORT_LEG && kept.length) { kept[kept.length - 1].len += leg.len; kept[kept.length - 1].end = leg.end; }
+      else { kept.push(leg); }
+    });
+
+    var steps = [{ kind: 'start', turn: '', text: 'Start at ' + (nodes[0].name || 'the entrance'), feet: 0 }];
+    var totalUnits = 0;
+    kept.forEach(function (leg, k) {
+      totalUnits += leg.len;
+      var last = k === kept.length - 1;
+      var tw = k === 0 ? { turn: 'straight', text: 'Head' } : turnWord(angleBetween(kept[k - 1].h, leg.h));
+      var end = nodes[leg.end];
+      var text;
+      if (last) {
+        text = tw.text + ' to ' + targetName;
+      } else {
+        text = tw.text + ' toward ' + (end.name || 'the end of the hall');
+      }
+      steps.push({
+        kind: last ? 'arrive' : 'walk',
+        turn: k === 0 ? 'straight' : tw.turn,
+        text: text,
+        feet: Math.max(5, Math.round(leg.len * fpu / 5) * 5)
+      });
+    });
+    var feet = Math.round(totalUnits * fpu / 5) * 5;
+    return { steps: steps, feet: feet, minutes: Math.max(1, Math.round(feet / FEET_PER_MINUTE)) };
+  }
+
   return {
     MAX_SNAP: MAX_SNAP,
     search: search,
     buildGraph: buildGraph,
     shortest: shortest,
-    routeTo: routeTo
+    routeTo: routeTo,
+    nearest: nearest,
+    describe: describe
   };
 });
