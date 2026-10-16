@@ -14,6 +14,12 @@
   // Edge kinds that a wheelchair user cannot take.
   var NOT_ACCESSIBLE = { steps: true, stair: true };
 
+  // Edge kinds that move between levels. They are the only edges allowed to join two levels.
+  var VERTICAL = { stair: true, elevator: true };
+
+  // Everything without a "level" is on level "1".
+  function lv(o) { return String(o.level == null ? '1' : o.level); }
+
   var TYPE_WORDS = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: '', connector: 'Connector'
@@ -90,20 +96,24 @@
   // Doors and entrances are not wired by hand: each one is joined to the
   // closest point on the closest hallway line ("snapping").
   // Returns { nodes, adj, problems, attach } where problems lists data mistakes.
+  // Each level is its own floor: a door only joins hallways on its own level, and the
+  // levels are linked only by "stair" and "elevator" edges.
   function buildGraph(paths, rooms, entrances, spots) {
     var nodes = {}, adj = {}, problems = [];
     var attach = []; // for drawing: [{ from: {x,y}, to: {x,y}, d }]
 
     function addNode(n) { nodes[n.id] = n; adj[n.id] = adj[n.id] || []; }
     function link(a, b, info) {
-      var w = dist(nodes[a], nodes[b]);
+      // Stairs and elevators can say how "long" they feel ("length"), since moving up a floor
+      // takes time but covers no distance on the map.
+      var w = info.length != null ? info.length : dist(nodes[a], nodes[b]);
       adj[a].push({ to: b, w: w, kind: info.kind, guess: !!info.guess });
       adj[b].push({ to: a, w: w, kind: info.kind, guess: !!info.guess });
     }
 
     (paths.nodes || []).forEach(function (n) {
       if (nodes[n.id]) { problems.push('Duplicate node id: ' + n.id); }
-      addNode({ id: n.id, x: n.x, y: n.y, name: n.name || '', guess: !!n.guess, kind: 'hall' });
+      addNode({ id: n.id, x: n.x, y: n.y, name: n.name || '', guess: !!n.guess, kind: 'hall', level: lv(n) });
     });
 
     var edges = [];
@@ -112,7 +122,12 @@
         problems.push('Edge ' + i + ' points to a missing node: ' + e.from + ' to ' + e.to);
         return;
       }
-      edges.push({ from: e.from, to: e.to, kind: e.kind || 'hall', guess: !!e.guess, stops: [] });
+      var kind = e.kind || 'hall', l1 = nodes[e.from].level, l2 = nodes[e.to].level;
+      if (l1 !== l2 && !VERTICAL[kind]) {
+        problems.push('Edge ' + e.from + ' to ' + e.to + ' joins level ' + l1 + ' and level ' + l2 + '. Give it "kind": "stair" or "elevator".');
+      }
+      edges.push({ from: e.from, to: e.to, kind: kind, guess: !!e.guess, stops: [], level: l1,
+        length: VERTICAL[kind] && e.length != null ? e.length : null });
     });
 
     // Every place a person can start or finish.
@@ -121,31 +136,31 @@
       var doors = r.doors || [];
       if (!doors.length) { problems.push('Room ' + r.id + ' has no doors'); }
       doors.forEach(function (d, k) {
-        points.push({ id: 'door:' + r.id + ':' + k, x: d[0], y: d[1], name: (r.door || r.name) + ' door' });
+        points.push({ id: 'door:' + r.id + ':' + k, x: d[0], y: d[1], name: (r.door || r.name) + ' door', level: lv(r) });
       });
     });
     (entrances || []).forEach(function (en) {
-      points.push({ id: 'entrance:' + en.id, x: en.x, y: en.y, name: en.name });
+      points.push({ id: 'entrance:' + en.id, x: en.x, y: en.y, name: en.name, level: lv(en) });
     });
     (spots || []).forEach(function (s) {
-      points.push({ id: 'spot:' + s.id, x: s.x, y: s.y, name: s.label });
+      points.push({ id: 'spot:' + s.id, x: s.x, y: s.y, name: s.label, level: lv(s) });
     });
 
     points.forEach(function (p) {
       var best = null;
       edges.forEach(function (e) {
-        // Doors join plain hallways only, never the middle of a staircase or a set of steps.
-        if (NOT_ACCESSIBLE[e.kind]) { return; }
+        // Doors join plain hallways on their own level only, never a staircase, elevator or steps.
+        if (NOT_ACCESSIBLE[e.kind] || VERTICAL[e.kind] || e.level !== p.level) { return; }
         var pr = project(p, nodes[e.from], nodes[e.to]);
         if (!best || pr.d < best.pr.d) { best = { e: e, pr: pr }; }
       });
-      addNode({ id: p.id, x: p.x, y: p.y, name: p.name, kind: 'point' });
+      addNode({ id: p.id, x: p.x, y: p.y, name: p.name, kind: 'point', level: p.level });
       if (!best) { problems.push(p.id + ' has no hallway to connect to'); return; }
       if (best.pr.d > MAX_SNAP) {
         problems.push(p.id + ' is ' + Math.round(best.pr.d) + ' units from the nearest hallway (limit ' + MAX_SNAP + ')');
       }
       best.e.stops.push({ t: best.pr.t, x: best.pr.x, y: best.pr.y, point: p.id, d: best.pr.d });
-      attach.push({ from: { x: p.x, y: p.y }, to: { x: best.pr.x, y: best.pr.y }, d: best.pr.d });
+      attach.push({ from: { x: p.x, y: p.y }, to: { x: best.pr.x, y: best.pr.y }, d: best.pr.d, level: p.level });
     });
 
     // Split each hallway line at the places where doors join it, in order along the line.
@@ -155,7 +170,7 @@
       e.stops.forEach(function (s, k) {
         var sid = 'snap:' + i + ':' + k;
         // A join point is named after where its hallway leads ("to"), so edges are drawn pointing inward.
-        addNode({ id: sid, x: s.x, y: s.y, name: nodes[e.to].name || nodes[e.from].name, kind: 'snap' });
+        addNode({ id: sid, x: s.x, y: s.y, name: nodes[e.to].name || nodes[e.from].name, kind: 'snap', level: e.level });
         link(prev, sid, e);
         link(sid, s.point, { kind: 'door', guess: false });
         prev = sid;
@@ -216,6 +231,7 @@
     return {
       ids: path,
       points: path.map(function (id) { return [graph.nodes[id].x, graph.nodes[id].y]; }),
+      levels: path.map(function (id) { return graph.nodes[id].level; }), // level of each point
       length: distTo[u],
       kinds: kinds,              // kinds[i] = kind of the edge that arrives at ids[i]
       outdoor: kinds.indexOf('outdoor') > -1,
@@ -252,6 +268,7 @@
   var SHORT_LEG = 22;      // a jog shorter than this (map units) is folded into the leg before it
   var STUB = 55;           // a first leg this short (a few steps from a door) absorbs a gentle bend
   var FEET_PER_MINUTE = 240; // an easy indoor walking pace, about 2.7 mph
+  var MINUTES_PER = { elevator: 0.75, stair: 0.4 }; // waiting for an elevator, climbing one flight
 
   function angleBetween(h1, h2) {
     // Positive = turning right, negative = turning left. The map's y axis points down.
@@ -269,17 +286,24 @@
 
   // Turns a route into readable steps.
   // targetName: what the last step should say you are walking to.
-  // opts.feetPerUnit: map units to feet (data.js SCALE). Returns
-  // { steps: [{ kind, turn, text, feet }], feet, minutes }.
+  // opts.feetPerUnit: map units to feet (data.js SCALE).
+  // opts.levelNames: { "2": "Level 2" } for the "Take the elevator up to ..." steps. Returns
+  // { steps: [{ kind, turn, text, feet, level }], feet, minutes }.
   function describe(graph, route, targetName, opts) {
     var fpu = (opts && opts.feetPerUnit) || 1;
     var nodes = route.ids.map(function (id) { return graph.nodes[id]; });
     var legs = [];
     for (var i = 1; i < nodes.length; i++) {
       var a = nodes[i - 1], b = nodes[i], len = dist(a, b);
+      // A stair or elevator ride is its own step.
+      if (route.kinds && VERTICAL[route.kinds[i]] && a.level !== b.level) {
+        legs.push({ vertical: true, kind: route.kinds[i], from: a, to: b, len: 0, start: i - 1, end: i });
+        continue;
+      }
       if (len < 0.5) { continue; }
       var h = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
       var cur = legs[legs.length - 1];
+      if (cur && cur.vertical) { cur = null; }
       // A short stub (like the few steps from a door to the hallway) absorbs a gentle bend too.
       var bend = cur ? Math.abs(angleBetween(cur.h, h)) : 0;
       var outside = route.kinds && route.kinds[i] === 'outdoor';
@@ -294,7 +318,8 @@
     var kept = [];
     legs.forEach(function (leg, k) {
       var edge = k === 0 || k === legs.length - 1;
-      if (!edge && leg.len < SHORT_LEG && kept.length && kept[kept.length - 1].outdoor === leg.outdoor) {
+      var before = kept[kept.length - 1];
+      if (!edge && !leg.vertical && before && !before.vertical && leg.len < SHORT_LEG && before.outdoor === leg.outdoor) {
         var prevLeg = kept[kept.length - 1];
         prevLeg.len += leg.len; prevLeg.end = leg.end; prevLeg.outdoor = prevLeg.outdoor || leg.outdoor;
       }
@@ -302,35 +327,47 @@
     });
 
     // A first step of only a few feet (from the door to the hallway) is folded into the next one.
-    if (kept.length > 1 && kept[0].len < STUB / 2) {
+    if (kept.length > 1 && !kept[1].vertical && kept[0].len < STUB / 2) {
       kept[1].len += kept[0].len; kept[1].start = kept[0].start; kept.shift();
     }
 
-    var steps = [{ kind: 'start', turn: '', text: 'Start at ' + (nodes[0].name || 'the entrance'), feet: 0 }];
-    var totalUnits = 0;
+    var names = (opts && opts.levelNames) || {};
+    var levelName = function (id) { return names[id] || 'Level ' + id; };
+    var steps = [{ kind: 'start', turn: '', text: 'Start at ' + (nodes[0].name || 'the entrance'), feet: 0, level: nodes[0].level }];
+    var totalUnits = 0, extraMinutes = 0;
     kept.forEach(function (leg, k) {
+      if (leg.vertical) {
+        var up = parseFloat(leg.to.level) > parseFloat(leg.from.level);
+        var how = leg.kind === 'elevator' ? 'the elevator' : (leg.from.name || 'the stairs');
+        extraMinutes += MINUTES_PER[leg.kind] || 0;
+        steps.push({ kind: 'level', turn: up ? 'up' : 'down', text: 'Take ' + how + (up ? ' up' : ' down') + ' to ' + levelName(leg.to.level),
+          feet: 0, level: leg.to.level, fromLevel: leg.from.level });
+        return;
+      }
       totalUnits += leg.len;
       var last = k === kept.length - 1;
-      var tw = k === 0 ? { turn: 'straight', text: 'Head' } : turnWord(angleBetween(kept[k - 1].h, leg.h));
+      var fresh = k === 0 || kept[k - 1].vertical; // first step on a floor has no turn
+      var tw = fresh ? { turn: 'straight', text: 'Head' } : turnWord(angleBetween(kept[k - 1].h, leg.h));
       var end = nodes[leg.end];
       var text;
       if (last) {
         text = tw.text + ' to ' + targetName;
       } else if (leg.outdoor) {
-        text = (k === 0 ? 'Head' : tw.text) + ' outside along the walkway toward ' + (end.name || 'the next building');
+        text = (fresh ? 'Head' : tw.text) + ' outside along the walkway toward ' + (end.name || 'the next building');
       } else {
         text = tw.text + ' toward ' + (end.name || 'the end of the hall');
       }
       steps.push({
         kind: last ? 'arrive' : 'walk',
-        turn: k === 0 ? 'straight' : tw.turn,
+        turn: fresh ? 'straight' : tw.turn,
         outdoor: !!leg.outdoor,
+        level: end.level,
         text: text,
         feet: Math.max(5, Math.round(leg.len * fpu / 5) * 5)
       });
     });
     var feet = Math.round(totalUnits * fpu / 5) * 5;
-    return { steps: steps, feet: feet, minutes: Math.max(1, Math.round(feet / FEET_PER_MINUTE)) };
+    return { steps: steps, feet: feet, minutes: Math.max(1, Math.round(feet / FEET_PER_MINUTE + extraMinutes)) };
   }
 
   return {
