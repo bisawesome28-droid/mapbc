@@ -1,0 +1,188 @@
+// Simple tests for search and routing. Run them with:  node tests.js
+// Each test prints PASS or FAIL. The last line says how many passed.
+var assert = require('assert');
+var ML = require('./logic.js');
+
+// data.js writes to window.*, so give it a pretend window.
+global.window = {};
+require('./data.js');
+var D = global.window;
+
+var passed = 0, failed = 0;
+function test(name, fn) {
+  try { fn(); passed++; console.log('PASS  ' + name); }
+  catch (e) { failed++; console.log('FAIL  ' + name + '\n      ' + e.message); }
+}
+
+function room(id, rooms) {
+  var list = rooms || D.ROOMS;
+  for (var i = 0; i < list.length; i++) { if (list[i].id === id) { return list[i]; } }
+  throw new Error('No room ' + id);
+}
+function ids(results) { return results.map(function (m) { return m.o.id; }); }
+function copyRooms() { return JSON.parse(JSON.stringify(D.ROOMS)); }
+
+var graph = ML.buildGraph(D.PATHS, D.ROOMS, D.ENTRANCES, D.SPOTS);
+function go(entrance, roomId, opts) { return ML.routeTo(graph, entrance, { kind: 'room', o: room(roomId) }, opts); }
+function passesNode(r, nodeId) { return r.ids.indexOf(nodeId) > -1; }
+
+// ---------- Search ----------
+
+test('search by placeholder id finds that room first', function () {
+  assert.strictEqual(ids(ML.search('S03', D.ROOMS, D.SPOTS))[0], 'S03');
+  assert.strictEqual(ids(ML.search('n06', D.ROOMS, D.SPOTS))[0], 'N06');
+});
+
+test('search for "restrooms" finds both restrooms', function () {
+  var r = ids(ML.search('restrooms', D.ROOMS, D.SPOTS));
+  assert.ok(r.indexOf('S-REST') > -1 && r.indexOf('N-REST') > -1, 'got ' + r);
+});
+
+test('search by keyword: "lecture hall" finds S11', function () {
+  assert.deepStrictEqual(ids(ML.search('lecture hall', D.ROOMS, D.SPOTS)), ['S11']);
+});
+
+test('search with several words needs all of them ("north classroom")', function () {
+  var r = ML.search('north classroom', D.ROOMS, D.SPOTS);
+  assert.ok(r.length >= 8, 'expected all north wing classrooms, got ' + r.length);
+  r.forEach(function (m) { assert.strictEqual(m.o.wing, 'North'); });
+});
+
+test('empty search and nonsense search return nothing', function () {
+  assert.deepStrictEqual(ML.search('   ', D.ROOMS, D.SPOTS), []);
+  assert.deepStrictEqual(ML.search('xyzzy', D.ROOMS, D.SPOTS), []);
+});
+
+test('adding a real room number (door) makes it searchable, data change only', function () {
+  var rooms = copyRooms();
+  room('S01', rooms).door = '195';
+  assert.strictEqual(ids(ML.search('195', rooms, []))[0], 'S01');
+});
+
+test('exact room number is listed before a longer one ("S19" before "S195")', function () {
+  var rooms = copyRooms();
+  room('S01', rooms).door = 'S195';
+  room('S02', rooms).door = 'S19';
+  assert.deepStrictEqual(ids(ML.search('S19', rooms, [])).slice(0, 2), ['S02', 'S01']);
+});
+
+// ---------- Path network data ----------
+
+test('path network has no data mistakes (missing nodes, far-away doors)', function () {
+  assert.deepStrictEqual(graph.problems, []);
+});
+
+test('every room has at least one door', function () {
+  D.ROOMS.forEach(function (r) { assert.ok(r.doors && r.doors.length, r.id + ' has no doors'); });
+});
+
+test('every entrance can reach every room and photo point', function () {
+  D.ENTRANCES.forEach(function (en) {
+    D.ROOMS.forEach(function (r) {
+      assert.ok(ML.routeTo(graph, en.id, { kind: 'room', o: r }), en.id + ' cannot reach ' + r.id);
+    });
+    D.SPOTS.forEach(function (s) {
+      assert.ok(ML.routeTo(graph, en.id, { kind: 'spot', o: s }), en.id + ' cannot reach ' + s.id);
+    });
+  });
+});
+
+// ---------- Routing ----------
+
+test('route starts at the entrance and ends at the room door', function () {
+  var r = go('E-S-WEST', 'S04');
+  var west = D.ENTRANCES.filter(function (e) { return e.id === 'E-S-WEST'; })[0];
+  assert.deepStrictEqual(r.points[0], [west.x, west.y]);
+  assert.deepStrictEqual(r.points[r.points.length - 1], room('S04').doors[0]);
+});
+
+test('west door to S04 stays in the south wing (no bridge)', function () {
+  var r = go('E-S-WEST', 'S04');
+  assert.ok(!passesNode(r, 's_bridge_s'), 'route went to the bridge');
+  assert.ok(r.names.indexOf('Main hallway (south wing)') > -1, 'route should use the main hallway');
+  assert.ok(r.names.join(' ').indexOf('north wing') === -1, 'route went into the north wing');
+});
+
+test('north wing south entry to S11 crosses the connector bridge', function () {
+  var r = go('E-N-SOUTH', 'S11');
+  assert.ok(passesNode(r, 'n_bridge_n') && passesNode(r, 's_bridge_s'));
+});
+
+test('a room with two doors uses the closer one (S11 from the north entry)', function () {
+  var r = go('E-S-NORTH', 'S11');
+  assert.deepStrictEqual(r.points[r.points.length - 1], room('S11').doors[1]);
+});
+
+test('routes never cut through another room', function () {
+  // Only the start (entrance) and the end (door) may be door/entrance points.
+  D.ENTRANCES.forEach(function (en) {
+    D.ROOMS.forEach(function (rm) {
+      var r = ML.routeTo(graph, en.id, { kind: 'room', o: rm });
+      r.ids.slice(1, -1).forEach(function (id) {
+        assert.ok(graph.nodes[id].kind !== 'point', en.id + ' to ' + rm.id + ' passes through ' + id);
+      });
+    });
+  });
+});
+
+test('a nearby entrance gives a shorter route than a far one', function () {
+  var direct = go('E-S-WEST', 'S03').length;
+  var far = go('E-N-SOUTH', 'S03').length;
+  assert.ok(direct < far, 'west door should be closer to S03 than the north wing');
+});
+
+test('renaming a room (door number) does not break its route', function () {
+  var rooms = copyRooms();
+  room('N03', rooms).door = '130';
+  var g = ML.buildGraph(D.PATHS, rooms, D.ENTRANCES, D.SPOTS);
+  assert.ok(ML.routeTo(g, 'E-S-LOBBY', { kind: 'room', o: room('N03', rooms) }));
+});
+
+// ---------- Accessible routes (uses a small made-up map) ----------
+//
+//   start --steps-- B --hall-- door        (short way, has steps)
+//   start --hall--  C --hall-- B           (long way round, step-free)
+var mini = {
+  nodes: [
+    { id: 'A', x: 0, y: 0 }, { id: 'B', x: 100, y: 0 }, { id: 'C', x: 0, y: 200 }, { id: 'D', x: 200, y: 0 }
+  ],
+  edges: [
+    { from: 'A', to: 'B', kind: 'steps' },
+    { from: 'A', to: 'C' }, { from: 'C', to: 'B' },
+    { from: 'B', to: 'D' }
+  ]
+};
+var miniRoom = { id: 'R1', name: 'Test room', doors: [[200, 10]] };
+var miniEntr = { id: 'IN', name: 'Test entrance', x: -10, y: -10 };
+
+test('normal route takes the short way with steps', function () {
+  var g = ML.buildGraph(mini, [miniRoom], [miniEntr], []);
+  var r = ML.routeTo(g, 'IN', { kind: 'room', o: miniRoom }, { accessible: false });
+  assert.ok(!passesNode(r, 'C'));
+});
+
+test('accessible route avoids steps and takes the long way', function () {
+  var g = ML.buildGraph(mini, [miniRoom], [miniEntr], []);
+  var r = ML.routeTo(g, 'IN', { kind: 'room', o: miniRoom }, { accessible: true });
+  assert.ok(passesNode(r, 'C'), 'should go round via C');
+});
+
+test('accessible route avoids stairs too, and says "no route" if steps are the only way', function () {
+  // E --hall-- A --stair-- B --hall-- D(room)
+  var only = {
+    nodes: mini.nodes.concat([{ id: 'E', x: -100, y: 0 }]),
+    edges: [{ from: 'E', to: 'A' }, { from: 'A', to: 'B', kind: 'stair' }, { from: 'B', to: 'D' }]
+  };
+  var g = ML.buildGraph(only, [miniRoom], [miniEntr], []);
+  assert.ok(ML.routeTo(g, 'IN', { kind: 'room', o: miniRoom }, { accessible: false }));
+  assert.strictEqual(ML.routeTo(g, 'IN', { kind: 'room', o: miniRoom }, { accessible: true }), null);
+});
+
+test('a broken edge (typo in a node id) is reported, not silently ignored', function () {
+  var bad = { nodes: mini.nodes, edges: [{ from: 'A', to: 'ZZ' }] };
+  var g = ML.buildGraph(bad, [], [], []);
+  assert.ok(g.problems.some(function (p) { return p.indexOf('ZZ') > -1; }));
+});
+
+console.log('\n' + passed + ' passed, ' + failed + ' failed');
+process.exit(failed ? 1 : 0);
