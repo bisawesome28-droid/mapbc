@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stokes Hall map</title>
+<style>
+:root{
+  --bg:#ffffff;--fg:#1c1c1a;--muted:#6b6a65;--line:#d8d6ce;--card:#f6f5f1;
+  --accent:#7b1e2b;--accent-bg:#f3dde0;--shell:#faf9f6;
+  --c-classroom:#ecc3b3;--c-office:#f2de9b;--c-service:#f1be86;--c-it:#d3d0a0;
+  --c-common:#cadceb;--c-core:#dedcd4;--c-conf:#ebc6d6;--c-connector:#efede6;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#1b1b19;--fg:#ecebe6;--muted:#a3a29b;--line:#3d3c38;--card:#262624;
+    --accent:#e08a97;--accent-bg:#4a2229;--shell:#232321;
+    --c-classroom:#6d3a2c;--c-office:#6a5a1e;--c-service:#75481a;--c-it:#55532a;
+    --c-common:#2f4a63;--c-core:#44433f;--c-conf:#64334a;--c-connector:#34332f;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:22px;font-weight:600;margin:0}
+h2{font-size:17px;font-weight:600;margin:0 0 6px}
+.sub{color:var(--muted);font-size:14px;margin:2px 0 14px}
+input[type=search]{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
+input[type=search]:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+#results{margin:8px 0 0;display:flex;flex-direction:column;gap:4px}
+#results button{text-align:left;display:flex;justify-content:space-between;gap:12px}
+#results .meta{color:var(--muted);font-size:13px}
+#results .none{color:var(--muted);font-size:14px;padding:4px 2px}
+#legend{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+#legend button{display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 9px}
+#legend button[aria-pressed=false]{opacity:.45}
+.sw{width:12px;height:12px;border-radius:3px;border:1px solid var(--line);display:inline-block}
+.mapwrap{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}
+#map{display:block;width:100%;height:auto;touch-action:none;cursor:grab;user-select:none}
+.zoom{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:36px;height:36px;padding:0;font-size:18px;line-height:1}
+.zoom .reset{font-size:12px}
+.shell{fill:var(--shell);stroke:var(--line);stroke-width:1}
+.room rect{stroke:var(--line);stroke-width:1}
+.room text{font-size:10px;fill:var(--fg);pointer-events:none}
+.room{cursor:pointer;transition:opacity .15s}
+.room:focus{outline:none}
+.room:focus rect{stroke:var(--accent);stroke-width:2}
+.t-classroom rect{fill:var(--c-classroom)}
+.t-office rect{fill:var(--c-office)}
+.t-service rect{fill:var(--c-service)}
+.t-it rect{fill:var(--c-it)}
+.t-common rect{fill:var(--c-common)}
+.t-core rect{fill:var(--c-core)}
+.t-conf rect{fill:var(--c-conf)}
+.t-connector rect{fill:var(--c-connector)}
+.room.dim{opacity:.2}
+.room.match rect{stroke:var(--accent);stroke-width:2.5}
+.room.sel rect{stroke:var(--accent);stroke-width:3.5}
+.spot{cursor:pointer}
+.spot circle{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.spot text{font-size:9px;fill:var(--accent);font-weight:600;pointer-events:none}
+.spot.sel circle{stroke-width:3}
+.spot:focus{outline:none}
+.spot:focus circle{stroke-width:3}
+.panel{background:var(--card);border-radius:12px;padding:12px 14px;margin:12px 0}
+.panel dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.panel dt{color:var(--muted)}
+.panel dd{margin:0}
+.badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+.badge.ok{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.empty{color:var(--muted);font-size:14px}
+.photo img{max-width:100%;border-radius:8px;display:block;margin-top:8px}
+.progress{color:var(--muted);font-size:13px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title"></h1>
+    <p class="sub" id="sub"></p>
+  </header>
+
+  <input id="q" type="search" placeholder="Search a room, door number, or something like restrooms" aria-label="Search the building" autocomplete="off">
+  <div id="results" role="list" aria-live="polite"></div>
+
+  <div id="legend" role="group" aria-label="Filter by type"></div>
+
+  <div class="mapwrap">
+    <svg id="map" viewBox="10 40 990 750" role="group" aria-label="Floor plan, drag to pan"></svg>
+    <div class="zoom">
+      <button id="zin" aria-label="Zoom in">+</button>
+      <button id="zout" aria-label="Zoom out">&minus;</button>
+      <button id="zreset" class="reset" aria-label="Reset view">All</button>
+    </div>
+  </div>
+
+  <section class="panel" id="detail" aria-live="polite"></section>
+  <section class="panel photo" id="photo" aria-live="polite"></section>
+  <p class="progress" id="progress"></p>
+</main>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  var B = window.BUILDING, ROOMS = window.ROOMS, SPOTS = window.SPOTS, SHELLS = window.SHELLS;
+  var TYPES = {
+    classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
+    common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
+    connector: 'Connector'
+  };
+  var LEGEND = ['classroom', 'office', 'service', 'it', 'common', 'conf', 'core'];
+  var NS = 'http://www.w3.org/2000/svg';
+  var svg = document.getElementById('map');
+  var FULL = { x: 10, y: 40, w: 990, h: 750 };
+  var RATIO = FULL.h / FULL.w;
+  var vb = { x: FULL.x, y: FULL.y, w: FULL.w, h: FULL.h };
+  var sel = null, hidden = {}, query = '', moved = false;
+  var roomEls = {}, spotEls = {};
+
+  document.getElementById('title').textContent = B.name + ', ' + B.level;
+  document.getElementById('sub').textContent = B.note;
+
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) { e.setAttribute(k, attrs[k]); }
+    if (parent) { parent.appendChild(e); }
+    return e;
+  }
+
+  function labelFor(r) { return r.door ? r.door : (r.label || r.id); }
+
+  function draw() {
+    SHELLS.forEach(function (s) {
+      el('rect', { x: s[0], y: s[1], width: s[2], height: s[3], 'class': 'shell' }, svg);
+    });
+    ROOMS.forEach(function (r) {
+      var g = el('g', { 'class': 'room t-' + r.type, 'data-id': r.id, tabindex: 0, role: 'button', 'aria-label': r.name }, svg);
+      el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 2 }, g);
+      var lines = String(labelFor(r)).split('\n');
+      var cx = r.x + r.w / 2;
+      var t = el('text', { x: cx, y: r.y + r.h / 2 - (lines.length - 1) * 5.5 + 3.5, 'text-anchor': 'middle' }, g);
+      lines.forEach(function (ln, i) {
+        var ts = el('tspan', { x: cx, dy: i ? 11 : 0 }, t);
+        ts.textContent = ln;
+      });
+      el('title', {}, g).textContent = r.name;
+      roomEls[r.id] = g;
+    });
+    SPOTS.forEach(function (s) {
+      var g = el('g', { 'class': 'spot', 'data-spot': s.id, tabindex: 0, role: 'button', 'aria-label': s.label + ', photo point' }, svg);
+      el('circle', { cx: s.x, cy: s.y, r: 11 }, g);
+      var t = el('text', { x: s.x, y: s.y + 3.5, 'text-anchor': 'middle' }, g);
+      t.textContent = '360';
+      el('title', {}, g).textContent = s.label;
+      spotEls[s.id] = g;
+    });
+  }
+
+  function hay(o, kind) {
+    if (kind === 'room') {
+      var typeWords = o.type === 'core' ? '' : TYPES[o.type];
+      return (o.id + ' ' + o.door + ' ' + o.name + ' ' + typeWords + ' ' + o.wing + ' ' + (o.keywords || '') + ' ' + (o.near || '')).toLowerCase();
+    }
+    return (o.id + ' ' + o.label + ' ' + (o.keywords || '')).toLowerCase();
+  }
+
+  function search(q) {
+    var toks = q.toLowerCase().split(/\s+/).map(function (t) { return t.replace(/s$/, ''); }).filter(Boolean);
+    if (!toks.length) { return []; }
+    var out = [];
+    ROOMS.forEach(function (r) {
+      var h = hay(r, 'room');
+      if (toks.every(function (t) { return h.indexOf(t) > -1; })) { out.push({ kind: 'room', o: r }); }
+    });
+    SPOTS.forEach(function (s) {
+      var h = hay(s, 'spot');
+      if (toks.every(function (t) { return h.indexOf(t) > -1; })) { out.push({ kind: 'spot', o: s }); }
+    });
+    return out;
+  }
+
+  function refresh() {
+    var matchIds = {};
+    var res = search(query);
+    res.forEach(function (m) { if (m.kind === 'room') { matchIds[m.o.id] = true; } });
+    ROOMS.forEach(function (r) {
+      var g = roomEls[r.id];
+      var off = hidden[r.type] === true;
+      var dimBySearch = query.trim() !== '' && !matchIds[r.id];
+      g.classList.toggle('dim', off || dimBySearch);
+      g.classList.toggle('match', !!matchIds[r.id]);
+      g.classList.toggle('sel', !!sel && sel.kind === 'room' && sel.o.id === r.id);
+    });
+    SPOTS.forEach(function (s) {
+      spotEls[s.id].classList.toggle('sel', !!sel && sel.kind === 'spot' && sel.o.id === s.id);
+    });
+    renderResults(res);
+  }
+
+  function renderResults(res) {
+    var box = document.getElementById('results');
+    box.textContent = '';
+    if (query.trim() === '') { return; }
+    if (!res.length) {
+      var n = document.createElement('div');
+      n.className = 'none';
+      n.textContent = 'No match. Try a door number, a room name, or words like stairs or restrooms.';
+      box.appendChild(n);
+      return;
+    }
+    res.slice(0, 8).forEach(function (m) {
+      var b = document.createElement('button');
+      var a = document.createElement('span');
+      var c = document.createElement('span');
+      c.className = 'meta';
+      if (m.kind === 'room') {
+        a.textContent = m.o.door ? m.o.door + ' (' + m.o.name + ')' : m.o.name;
+        c.textContent = m.o.wing + ' wing';
+      } else {
+        a.textContent = m.o.label;
+        c.textContent = 'Photo point';
+      }
+      b.appendChild(a); b.appendChild(c);
+      b.addEventListener('click', function () { choose(m); });
+      box.appendChild(b);
+    });
+    if (res.length > 8) {
+      var more = document.createElement('div');
+      more.className = 'none';
+      more.textContent = (res.length - 8) + ' more. Type more words to narrow it down.';
+      box.appendChild(more);
+    }
+  }
+
+  function addRow(dl, label, value, empty) {
+    var dt = document.createElement('dt');
+    var dd = document.createElement('dd');
+    dt.textContent = label;
+    if (value) { dd.textContent = value; }
+    else { dd.textContent = empty; dd.className = 'empty'; }
+    dl.appendChild(dt); dl.appendChild(dd);
+  }
+
+  function renderDetail() {
+    var box = document.getElementById('detail');
+    box.textContent = '';
+    if (!sel) {
+      var p = document.createElement('div');
+      p.className = 'empty';
+      p.textContent = 'Search above or tap a room on the map to see its details.';
+      box.appendChild(p);
+      return;
+    }
+    var h = document.createElement('h2');
+    box.appendChild(h);
+    var dl = document.createElement('dl');
+    if (sel.kind === 'room') {
+      var r = sel.o;
+      h.textContent = r.door ? r.door + ' (' + r.name + ')' : r.name;
+      addRow(dl, 'Type', TYPES[r.type], '');
+      addRow(dl, 'Wing', r.wing, '');
+      addRow(dl, 'Door number', r.door, 'Not added yet');
+      addRow(dl, 'Nearest landmark', r.near, 'Not added yet');
+      addRow(dl, 'Directions', r.directions, 'Not written yet');
+      var dt = document.createElement('dt'); dt.textContent = 'Status';
+      var dd = document.createElement('dd');
+      var bd = document.createElement('span');
+      bd.className = 'badge' + (r.verified ? ' ok' : '');
+      bd.textContent = r.verified ? 'Verified on site' : 'Not verified yet';
+      dd.appendChild(bd);
+      dl.appendChild(dt); dl.appendChild(dd);
+    } else {
+      var s = sel.o;
+      h.textContent = s.label;
+      addRow(dl, 'Type', 'Photo point', '');
+      var dt2 = document.createElement('dt'); dt2.textContent = 'Status';
+      var dd2 = document.createElement('dd');
+      var bd2 = document.createElement('span');
+      bd2.className = 'badge' + (s.verified ? ' ok' : '');
+      bd2.textContent = s.verified ? 'Verified on site' : 'Not verified yet';
+      dd2.appendChild(bd2);
+      dl.appendChild(dt2); dl.appendChild(dd2);
+    }
+    box.appendChild(dl);
+  }
+
+  function renderPhoto() {
+    var box = document.getElementById('photo');
+    box.textContent = '';
+    var h = document.createElement('h2');
+    h.textContent = 'Photo';
+    box.appendChild(h);
+    var msg = document.createElement('div');
+    msg.className = 'empty';
+    box.appendChild(msg);
+    if (!sel) { msg.textContent = 'Select a room or a 360 marker to see its photo.'; return; }
+    var file = sel.o.photo;
+    if (!file) { msg.textContent = 'No photo added yet. Set a photo file name in data.js to show one here.'; return; }
+    var img = document.createElement('img');
+    img.alt = 'Photo of ' + (sel.kind === 'room' ? sel.o.name : sel.o.label);
+    img.onerror = function () { img.remove(); msg.textContent = 'Photo file not found: ' + file; };
+    img.onload = function () { msg.textContent = ''; };
+    img.src = file;
+    box.appendChild(img);
+  }
+
+  function setVB() {
+    vb.h = vb.w * RATIO;
+    svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);
+  }
+  function clampVB() {
+    vb.w = Math.max(140, Math.min(FULL.w, vb.w));
+    vb.h = vb.w * RATIO;
+    vb.x = Math.max(FULL.x - 40, Math.min(FULL.x + FULL.w + 40 - vb.w, vb.x));
+    vb.y = Math.max(FULL.y - 40, Math.min(FULL.y + FULL.h + 40 - vb.h, vb.y));
+  }
+  function zoom(f, cx, cy) {
+    if (cx == null) { cx = vb.x + vb.w / 2; }
+    if (cy == null) { cy = vb.y + vb.h / 2; }
+    var nw = Math.max(140, Math.min(FULL.w, vb.w * f));
+    var k = nw / vb.w;
+    vb.x = cx - (cx - vb.x) * k;
+    vb.y = cy - (cy - vb.y) * k;
+    vb.w = nw;
+    clampVB(); setVB();
+  }
+  function fitTo(x, y, w, h) {
+    var nw = Math.max(240, w * 2.6, (h * 2.6) / RATIO);
+    vb.w = Math.min(nw, FULL.w);
+    vb.x = x + w / 2 - vb.w / 2;
+    vb.h = vb.w * RATIO;
+    vb.y = y + h / 2 - vb.h / 2;
+    clampVB(); setVB();
+  }
+
+  function choose(m) {
+    sel = m;
+    if (m.kind === 'room') { fitTo(m.o.x, m.o.y, m.o.w, m.o.h); }
+    else { fitTo(m.o.x - 20, m.o.y - 20, 40, 40); }
+    refresh(); renderDetail(); renderPhoto();
+  }
+
+  function buildLegend() {
+    var box = document.getElementById('legend');
+    LEGEND.forEach(function (t) {
+      var b = document.createElement('button');
+      b.setAttribute('aria-pressed', 'true');
+      var sw = document.createElement('span');
+      sw.className = 'sw';
+      sw.style.background = 'var(--c-' + t + ')';
+      b.appendChild(sw);
+      b.appendChild(document.createTextNode(TYPES[t]));
+      b.addEventListener('click', function () {
+        hidden[t] = !hidden[t];
+        b.setAttribute('aria-pressed', hidden[t] ? 'false' : 'true');
+        refresh();
+      });
+      box.appendChild(b);
+    });
+    var sp = document.createElement('span');
+    sp.className = 'badge';
+    sp.textContent = '360 = photo point';
+    sp.style.alignSelf = 'center';
+    box.appendChild(sp);
+  }
+
+  function buildProgress() {
+    var cls = ROOMS.filter(function (r) { return r.type === 'classroom'; });
+    var done = cls.filter(function (r) { return r.door; }).length;
+    var spotsDone = SPOTS.filter(function (s) { return s.photo; }).length;
+    document.getElementById('progress').textContent =
+      'Data progress: ' + done + ' of ' + cls.length + ' classrooms have door numbers, ' +
+      spotsDone + ' of ' + SPOTS.length + ' photo points have photos.';
+  }
+
+  var drag = null;
+  svg.addEventListener('pointerdown', function (e) {
+    moved = false;
+    drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y };
+  });
+  svg.addEventListener('pointermove', function (e) {
+    if (!drag) { return; }
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 6) { moved = true; }
+    if (moved) {
+      var s = vb.w / svg.clientWidth;
+      vb.x = drag.vx - dx * s;
+      vb.y = drag.vy - dy * s;
+      clampVB(); setVB();
+    }
+  });
+  window.addEventListener('pointerup', function () { drag = null; });
+  svg.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    var rect = svg.getBoundingClientRect();
+    var cx = vb.x + ((e.clientX - rect.left) / rect.width) * vb.w;
+    var cy = vb.y + ((e.clientY - rect.top) / rect.height) * vb.h;
+    zoom(e.deltaY < 0 ? 0.85 : 1.18, cx, cy);
+  }, { passive: false });
+
+  function pick(target) {
+    var g = target.closest ? target.closest('[data-id],[data-spot]') : null;
+    if (!g) { return null; }
+    if (g.getAttribute('data-id')) {
+      var id = g.getAttribute('data-id');
+      for (var i = 0; i < ROOMS.length; i++) { if (ROOMS[i].id === id) { return { kind: 'room', o: ROOMS[i] }; } }
+    } else {
+      var sid = g.getAttribute('data-spot');
+      for (var j = 0; j < SPOTS.length; j++) { if (SPOTS[j].id === sid) { return { kind: 'spot', o: SPOTS[j] }; } }
+    }
+    return null;
+  }
+  svg.addEventListener('click', function (e) {
+    if (moved) { moved = false; return; }
+    var m = pick(e.target);
+    if (m) { choose(m); }
+  });
+  svg.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      var m = pick(e.target);
+      if (m) { e.preventDefault(); choose(m); }
+    }
+  });
+
+  document.getElementById('zin').addEventListener('click', function () { zoom(0.7); });
+  document.getElementById('zout').addEventListener('click', function () { zoom(1.4); });
+  document.getElementById('zreset').addEventListener('click', function () {
+    vb = { x: FULL.x, y: FULL.y, w: FULL.w, h: FULL.h }; setVB();
+  });
+
+  var q = document.getElementById('q');
+  q.addEventListener('input', function () { query = q.value; refresh(); });
+  q.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      var res = search(query);
+      if (res.length) { choose(res[0]); }
+    }
+  });
+
+  draw();
+  buildLegend();
+  buildProgress();
+  setVB();
+  refresh();
+  renderDetail();
+  renderPhoto();
+})();
+</script>
+</body>
+</html>
