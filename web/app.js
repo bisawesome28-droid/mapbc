@@ -4,7 +4,7 @@
 // so a native app reuses everything in core/ and the data, and rewrites only this part.
 (function () {
   var ML = window.MapLogic, MI = window.MapIndoor, MS = window.MapSchool, STYLE = window.MapStyle;
-  var VERSION = '2026-10-16 t'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 u'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -16,6 +16,7 @@
   // The inside of a building shows once you are zoomed in past the whole building: its width or its height, whichever
   // is bigger, is at least this share of the map on screen (so you have to want to see inside it).
   var SHOW_INSIDE_AT = 1.0;
+  var OPEN_ZOOM = 18.6; // zoomed in this far, the middle of the screen over a building opens it, however small the building is
   var TILT_PITCH = 45, MAX_PITCH = 60; // 3D is optional: the map opens flat and the "3D" button tilts it
 
   // Icons: plain 24x24 line drawings.
@@ -191,7 +192,7 @@
       var w = Math.max.apply(null, xy.map(function (q) { return q.x; })) - Math.min.apply(null, xy.map(function (q) { return q.x; }));
       var hh = Math.max.apply(null, xy.map(function (q) { return q.y; })) - Math.min.apply(null, xy.map(function (q) { return q.y; }));
       var c = map.getContainer(), mpp = Math.max(w / c.clientWidth, hh / c.clientHeight) / (SHOW_INSIDE_AT * 1.05); // metres per pixel
-      return Math.log(40075016.686 * Math.cos(b.center[1] * Math.PI / 180) / (512 * mpp)) / Math.LN2;
+      return Math.min(OPEN_ZOOM + 0.05, Math.log(40075016.686 * Math.cos(b.center[1] * Math.PI / 180) / (512 * mpp)) / Math.LN2);
     }
     // Plan box [x0, y0, x1, y1] of a building -> its four corners as [lng, lat].
     function boxPoints(b, box) { return [[box[0], box[1]], [box[2], box[1]], [box[2], box[3]], [box[0], box[3]]].map(function (p) { return b.toLngLat(p[0], p[1]); }); }
@@ -223,8 +224,11 @@
         x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
       });
       var c = map.getContainer(), w = c.clientWidth, hh = c.clientHeight;
-      if (w / 2 < x0 || w / 2 > x1 || hh / 2 < y0 || hh / 2 > y1) { return 0; }
-      return Math.max((x1 - x0) / w, (y1 - y0) / hh);
+      var mx = 0.1 * (x1 - x0), my = 0.1 * (y1 - y0); // a little slack, so aiming near the edge still counts
+      if (w / 2 < x0 - mx || w / 2 > x1 + mx || hh / 2 < y0 - my || hh / 2 > y1 + my) { return 0; }
+      var fill = Math.max((x1 - x0) / w, (y1 - y0) / hh);
+      // A small building (the library, McElroy) would only fill the screen when very close: open it at a fixed zoom instead.
+      return map.getZoom() >= OPEN_ZOOM ? Math.max(fill, SHOW_INSIDE_AT) : fill;
     }
     window.mapbc = { fillOf: function (id) { return map ? fillOf(BY[id]) : 0; }, open: function () { return openB ? openB.id : ''; }, model: M, version: VERSION };
 
