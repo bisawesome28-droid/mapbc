@@ -12,7 +12,7 @@ function readJson(f) { return JSON.parse(fs.readFileSync(f, 'utf8')); }
 function loadSchool(id) {
   var dir = 'schools/' + id + '/', school = readJson(dir + 'school.json'), f = MS.files(school);
   var opt = function (p) { return p ? readJson(dir + p) : null; };
-  return MS.prepare(school, { data: opt(f.campus.data), base: null, extras: opt(f.campus.extras) }, f.buildings.map(function (p) { return readJson(dir + p); }));
+  return MS.prepare(school, { data: opt(f.campus.data), base: null, extras: opt(f.campus.extras), categories: opt(f.campus.categories) }, f.buildings.map(function (p) { return readJson(dir + p); }));
 }
 var SCHOOLS = readJson('schools/index.json').schools.map(function (s) { return loadSchool(s.folder || s.id); });
 var BC = SCHOOLS[0];
@@ -654,6 +654,28 @@ test('search: a room whose name matches comes before one that only has it in its
   var rooms = [{ id: 'A', door: 'A', name: 'Digitization Lab', keywords: 'digitization scanning lab' }, { id: 'B', door: 'B', name: 'Scan Lab', keywords: '' }];
   assert.deepStrictEqual(ids(ML.search('scan lab', rooms)), ['B', 'A']);
   assert.strictEqual(ids(ML.search('A', rooms))[0], 'A'); // an exact room number still comes first
+});
+
+test('campus buildings are coloured by kind, and the floor plans keep their outline', function () {
+  var f = BC.campus.data.buildings.features, by = {};
+  f.forEach(function (x) { if (x.properties.name) { by[x.properties.name] = x.properties; } });
+  assert.strictEqual(by['Devlin Hall'].cat, 'academic');
+  assert.strictEqual(by["O'Neill Library"].cat, 'library');
+  assert.strictEqual(by["O'Neill Library"].indoor, 'oneill');
+  assert.strictEqual(by['McElroy Commons'].cat, 'dining');
+  assert.strictEqual(by['Comm. Ave. Garage'].cat, 'garage');
+  assert.strictEqual(by['Conte Forum'].cat, 'athletics');
+  assert.strictEqual(by['Mod 12'].cat, 'residence');
+  assert.strictEqual(by['Service Building'].cat, undefined);
+  var c = MSTYLE.palette('light', BC.school);
+  assert.ok(MSTYLE.categories.length === 6 && c.cats.length === 6 && c.buildingRoof[0] === 'match' && c.buildingSide[0] === 'match');
+  assert.deepStrictEqual(BC.problems, []);
+});
+
+test('O\'Neill opens on Level 3 (its main floor)', function () {
+  var b = BC.byId.oneill;
+  assert.strictEqual(String(b.defaultLevel), '3');
+  assert.ok(b.levels.some(function (l) { return l.id === '3'; }));
 });
 
 // Every building of every school: these run for each new building file without anyone adding a test.

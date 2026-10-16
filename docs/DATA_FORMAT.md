@@ -8,7 +8,8 @@ and by a future native app. Code lives in `core/` (shared) and `web/` (the web p
 schools/index.json            which schools exist and which one opens by default
 schools/<school>/school.json  the school: centre, colours, which buildings it has
 schools/<school>/campus/      outdoor data: data.json (buildings, walkways, entrances), base.json (grass, roads,
-                              trees, houses, heights), extras.json (hand-added entrances and lobbies)
+                              trees, houses, heights), extras.json (hand-added entrances and lobbies),
+                              categories.json (which kind each building is: academic, library, dining...)
 schools/<school>/buildings/   one file per building with an indoor map, e.g. stokes.json, mcelroy.json, oneill.json
 ```
 
@@ -25,6 +26,7 @@ schools/<school>/buildings/   one file per building with an indoor map, e.g. sto
 | `id`, `name`, `short`, `osm` | id used in links, display name, short name, OpenStreetMap ids of its footprint(s) |
 | `height` | metres for the 3D block (optional) |
 | `levels` | floors, bottom to top: `{id, name}`; `"missing": true` marks a floor not mapped yet |
+| `defaultLevel` | the floor shown when the building first opens (optional; default: the lowest mapped floor). O'Neill uses "3", its main floor |
 | `geo` | GPS control points (see above) |
 | `scale` | `feetPerUnit` for walking times |
 | `outlines` | outside walls of each floor: `{level, wing, points}` |
@@ -43,3 +45,9 @@ Room `type`: `classroom`, `office`, `service`, `it`, `common`, `conf`, `core` (s
 (`schools/<school>/campus/osm_export.geojson`, not committed). Hand additions go in `extras.json`.
 A hand-added entrance names its `building` (the OpenStreetMap name). `"wheelchair": "no"` (a stairwell, for example) keeps
 step-free routes from using that door; `"guess": true` means not checked on site.
+
+## Building colours
+`campus/categories.json` lists building names under `academic`, `library`, `dining`, `garage`, `athletics` and `residence`;
+the map colours each kind (colours: `CATEGORIES` in `core/style.js`, the same for every school). A building not listed stays
+tan. A building with a floor plan also gets a thin outline in the school's colour. `node tests.js` reports a name that is not
+a building in the campus data.

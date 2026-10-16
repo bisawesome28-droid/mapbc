@@ -14,6 +14,28 @@
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   else { root.MapStyle = api; }
 })(this, function () {
+  // Kinds of campus building and their colours as seen from above (the roof). The walls are a little darker; in dark mode
+  // everything is mixed toward the night background. Which building is which kind: a school's campus/categories.json.
+  var CATEGORIES = [
+    { id: 'academic', name: 'Academic', color: '#7f9cc4' },
+    { id: 'library', name: 'Libraries', color: '#8e78b5' },
+    { id: 'dining', name: 'Dining', color: '#e3bc4f' },
+    { id: 'garage', name: 'Garages', color: '#b0b0b0' },
+    { id: 'athletics', name: 'Athletics and rec', color: '#e8913f' },
+    { id: 'residence', name: 'Residence halls', color: '#d9604f' }
+  ];
+  function mix(a, b, t) {
+    var pa = [1, 3, 5].map(function (i) { return parseInt(a.substr(i, 2), 16); }), pb = [1, 3, 5].map(function (i) { return parseInt(b.substr(i, 2), 16); });
+    return '#' + pa.map(function (v, i) { var x = Math.round(v + (pb[i] - v) * t); return (x < 16 ? '0' : '') + x.toString(16); }).join('');
+  }
+  // A colour expression for the map: the building's "cat" picks its colour, anything else gets "other".
+  function byCategory(pick, other) {
+    var e = ['match', ['get', 'cat']];
+    CATEGORIES.forEach(function (k) { e.push(k.id, pick(k)); });
+    e.push(other);
+    return e;
+  }
+
   var PALETTES = {
     light: {
       land: '#f3f2ee', campus: '#f5efe9', residential: '#efede8',
@@ -93,12 +115,13 @@
       { id: 'houses-roof', type: 'fill-extrusion', source: 'b-houses', minzoom: 14.5,
         paint: { 'fill-extrusion-color': c.houseTop, 'fill-extrusion-base': ['-', ['get', 'h'], 0.6], 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': false } },
       { id: 'buildings-edge', type: 'line', source: 'buildings', filter: plain, paint: { 'line-color': c.edge, 'line-width': Z([15, 0.5, 19, 2]), 'line-opacity': 0.8 } },
-      { id: 'buildings-3d', type: 'fill-extrusion', source: 'buildings', filter: plain,
-        paint: { 'fill-extrusion-color': c.building, 'fill-extrusion-height': ['-', ['coalesce', ['get', 'h'], 15], 0.8], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true } },
-      { id: 'buildings-roof', type: 'fill-extrusion', source: 'buildings', filter: plain,
-        paint: { 'fill-extrusion-color': c.buildingTop, 'fill-extrusion-base': ['-', ['coalesce', ['get', 'h'], 15], 0.8], 'fill-extrusion-height': ['coalesce', ['get', 'h'], 15], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': false } },
-      { id: 'indoor-3d', type: 'fill-extrusion', source: 'buildings', filter: ['has', 'indoor'],
-        paint: { 'fill-extrusion-color': c.indoor, 'fill-extrusion-height': ['coalesce', ['get', 'h'], 20], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true } },
+      { id: 'buildings-3d', type: 'fill-extrusion', source: 'buildings',
+        paint: { 'fill-extrusion-color': c.buildingSide, 'fill-extrusion-height': ['-', ['coalesce', ['get', 'h'], 15], 0.8], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true } },
+      { id: 'buildings-roof', type: 'fill-extrusion', source: 'buildings',
+        paint: { 'fill-extrusion-color': c.buildingRoof, 'fill-extrusion-base': ['-', ['coalesce', ['get', 'h'], 15], 0.8], 'fill-extrusion-height': ['coalesce', ['get', 'h'], 15], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': false } },
+      // Buildings with a floor plan get a thin outline in the school's colour (the app hides it on the building you are inside).
+      { id: 'indoor-edge', type: 'line', source: 'buildings', filter: ['has', 'indoor'], layout: { 'line-join': 'round' },
+        paint: { 'line-color': c.indoor, 'line-width': Z([15, 1.2, 19, 2.6]) } },
       { id: 'road-names', type: 'symbol', source: 'b-lines', minzoom: 15.5, filter: ['all', ['has', 'name'], ['in', ['get', 'class'], ['literal', ['major', 'minor', 'service']]]],
         layout: { 'symbol-placement': 'line', 'text-field': ['get', 'name'], 'text-font': ['Inter Regular'], 'text-size': Z([15.5, 10, 19, 13]), 'text-max-angle': 30, 'symbol-spacing': 320 },
         paint: { 'text-color': c.labelSoft, 'text-halo-color': c.halo, 'text-halo-width': 1.4 } },
@@ -258,6 +281,8 @@
 
   return {
     palettes: PALETTES,
+    categories: CATEGORIES,
+    byCategory: byCategory,
     // Sun: from the south-west, fairly low, so walls facing different ways get different shades.
     light: { light: { anchor: 'map', position: [1.4, 215, 38], intensity: 0.5, color: '#fff6e8' }, dark: { anchor: 'map', position: [1.4, 215, 38], intensity: 0.35, color: '#b9c6ff' } },
     ground: ground,
@@ -271,6 +296,10 @@
     palette: function (mode, school) {
       var base = PALETTES[mode === 'dark' ? 'dark' : 'light'], out = {};
       for (var k in base) { out[k] = base[k]; }
+      var night = mode === 'dark', ground = night ? '#121620' : '#000000';
+      out.cats = CATEGORIES.map(function (k) { return { id: k.id, name: k.name, color: night ? mix(k.color, '#121620', 0.5) : k.color }; });
+      out.buildingRoof = byCategory(function (k) { return night ? mix(k.color, '#121620', 0.5) : k.color; }, out.buildingTop);
+      out.buildingSide = byCategory(function (k) { return night ? mix(k.color, '#121620', 0.65) : mix(k.color, ground, 0.14); }, out.building);
       if (school && school.accent && mode !== 'dark') { out.accent = school.accent; }
       if (school && school.accentDark && mode === 'dark') { out.accent = school.accentDark; }
       return out;

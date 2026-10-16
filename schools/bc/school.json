@@ -7,6 +7,6 @@
   "center": [-71.1685,42.3355],
   "zoom": 16,
   "basemap": "osm-dev",
-  "campus": {"data": "campus/data.json", "base": "campus/base.json", "extras": "campus/extras.json"},
+  "campus": {"data": "campus/data.json", "base": "campus/base.json", "extras": "campus/extras.json", "categories": "campus/categories.json"},
   "buildings": ["stokes", "mcelroy", "oneill"]
 }
