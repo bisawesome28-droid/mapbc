@@ -422,6 +422,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
+  var VERSION = '2026-10-16 d'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -827,12 +828,10 @@ dd.none{color:var(--muted)}
     geo = ML.fitGeo([{ x: FULL.x, y: FULL.y, lat: a0.lat, lng: a0.lng }, { x: FULL.x + 1000, y: FULL.y, lat: b0.lat, lng: b0.lng }]);
     geoParked = true;
   }
-  // When the inside of Stokes shows. U_FIT is the zoom (in plan units per screen pixel) at which the whole
-  // building just fits this screen, so the rule works the same on a phone and a laptop:
-  // fully shown when the building is at least about 85% of "fits the screen", hidden below about 60%.
-  var U_FIT = 4;
-  var INSIDE = { hidden: 1.6, full: 1.15 };
-  var INSIDE_ROUTE = { hidden: 3.6, full: 2.6 }; // shows sooner while a route or a room is showing
+  // When the inside of Stokes shows: only once the building fills more than half of the map area on screen
+  // (its width or its height, whichever is bigger, measured on the screen). Below that it looks like any
+  // other building. It fades in over the next few percent so it does not pop.
+  var SHOW_INSIDE_AT = 0.5, FADE_OVER = 0.06;
   var START_ZOOM_OUT = 1.5; // the page opens this many zoom steps further out than "building fits"
 
 
@@ -851,15 +850,32 @@ dd.none{color:var(--muted)}
     svg.style.setProperty('--rot', (-Math.atan2(b, a) * 180 / Math.PI).toFixed(2) + 'deg');
     svg.classList.toggle('z-in', u < 1.3);
     svg.classList.toggle('labels', u < 3.6);
-    // Zoomed out, Stokes looks like any other building. The inside fades in as you zoom in
-    // (sooner when a route or a room is showing, so the route stays visible).
-    // The rule is "how big is the building on screen", so it works the same on a phone and a laptop.
-    var r = (route || sel) ? INSIDE_ROUTE : INSIDE;
-    var hiddenU = U_FIT * r.hidden, fullU = U_FIT * r.full;
-    var op = Math.max(0, Math.min(1, (hiddenU - u) / (hiddenU - fullU)));
+    // Zoomed out, Stokes looks like any other building. The inside shows only once the building fills
+    // more than SHOW_INSIDE_AT of the screen, so it works the same on a phone and a laptop, with or
+    // without a room or a route selected.
+    var op = Math.max(0, Math.min(1, (buildingFill() - SHOW_INSIDE_AT) / FADE_OVER));
     svg.style.opacity = op.toFixed(3);
     svg.style.display = op > 0 ? '' : 'none';
   }
+
+  // How much of the screen the building fills: 0.5 means its width (or height) is half the map's width
+  // (or height). Above 1 means you are zoomed in so far that the building is bigger than the screen.
+  var footPts = null;
+  function buildingFill() {
+    if (!map) { return 0; }
+    if (!footPts) {
+      footPts = [];
+      OUTLINES.forEach(function (o) { if (lv(o) === LEVELS[0].id && o.wing !== 'Bridge') { footPts = footPts.concat(o.points); } });
+    }
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    footPts.forEach(function (q) {
+      var p = map.project(toLngLat(q[0], q[1]));
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    });
+    var c = map.getContainer();
+    return Math.max((x1 - x0) / c.clientWidth, (y1 - y0) / c.clientHeight);
+  }
+  window.mapbcFill = buildingFill; // for the browser tests
 
   function boundsOf(b) {
     var bounds = null;
@@ -878,11 +894,9 @@ dd.none{color:var(--muted)}
     if (!map) { return; }
     map.fitBounds(boundsOf(b), { padding: padFor(padding), maxZoom: maxZoom || 20.5, duration: REDUCED ? 0 : 700 });
   }
-  // Works out U_FIT for this screen size (see INSIDE above). Called at start and when the window resizes.
+  // The camera that makes the whole building just fit the screen (used for the opening view).
   function measureFit() {
-    var cam = map.cameraForBounds(boundsOf(planBox()), { padding: padFor(40) });
-    if (cam && u) { U_FIT = u * Math.pow(2, map.getZoom() - cam.zoom); }
-    return cam;
+    return map.cameraForBounds(boundsOf(planBox()), { padding: padFor(40) });
   }
   function planBox() {
     var pts = [];
@@ -961,7 +975,7 @@ dd.none{color:var(--muted)}
     map.getCanvasContainer().appendChild(svg); // the floor plan moves with the map
     window.mapbcMap = map; // handy for testing and for poking at the map from the browser console
     map.on('move', applyView);
-    map.on('resize', function () { applyView(); measureFit(); applyView(); });
+    map.on('resize', applyView);
     map.on('click', onMapClick);
     applyView();
     // Open on the building with campus around it: a little further out than "the building fits".
@@ -1670,6 +1684,7 @@ dd.none{color:var(--muted)}
     box.appendChild(bar('Classrooms with door numbers', done, cls.length));
     box.appendChild(bar('Photo points with photos', photos, SPOTS.length));
     box.appendChild(h('p', { style: 'margin:0', text: B.note }));
+    box.appendChild(h('p', { style: 'margin:8px 0 0;opacity:.7', id: 'version', text: 'Map version ' + VERSION + ' (if this is older than expected, refresh the page)' }));
   }
 
   // ---------- State changes ----------
