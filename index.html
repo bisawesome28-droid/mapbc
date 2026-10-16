@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Stokes Hall indoor map</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238c1d2f'/%3E%3Cpath d='M16 6a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z' fill='white'/%3E%3Ccircle cx='16' cy='13' r='2.6' fill='%238c1d2f'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <style>
 :root{
   --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -175,7 +176,19 @@ dd.none{color:var(--muted)}
 
 /* ---------- Map ---------- */
 .mapwrap{position:relative;height:100%;border-radius:20px;overflow:hidden;background:var(--map);border:1px solid var(--line);box-shadow:var(--shadow)}
-#map{display:block;width:100%;height:100%;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+#world{position:absolute;inset:0}
+/* The floor plan: drawn at 1 px per plan unit, then moved onto the map with a CSS transform. */
+#map{position:absolute;left:0;top:0;transform-origin:0 0;overflow:visible;pointer-events:none;user-select:none;-webkit-user-select:none}
+#map .room,#map .spot,#map .entrance{pointer-events:visiblePainted}
+#map:not(.labels) .rlabel,#map:not(.labels) .spot,#map:not(.labels) .wing{display:none}
+#map.z-in .wing{display:none}
+/* Labels undo the building's turn so they always read upright. */
+#map .rlabel,#map .fixl,#map .wing{transform-box:fill-box;transform-origin:center;transform:rotate(var(--rot,0deg))}
+.you-dot-el{width:18px;height:18px;border-radius:50%;background:#0a6cff;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.you-dot-el::after{content:"";position:absolute;inset:-3px;border-radius:50%;background:#0a6cff;opacity:.35;animation:ping2 2s ease-out infinite;z-index:-1}
+@media (prefers-reduced-motion:reduce){.you-dot-el::after{animation:none;display:none}}
+.maplibregl-ctrl-attrib{font-size:11px}
+.maplibregl-ctrl-bottom-right{z-index:3}
 #map:active{cursor:grabbing}
 .glass{background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
 .zoom{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;overflow:hidden}
@@ -208,13 +221,13 @@ dd.none{color:var(--muted)}
 .golevel{display:inline-block;margin-left:8px;border:1px solid var(--route);color:var(--route);background:transparent;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:700;vertical-align:1px}
 .golevel:hover{background:var(--route-soft)}
 .step.level .ico{background:var(--route-soft);color:var(--route);border-color:transparent}
-.legend{position:absolute;left:12px;bottom:12px;right:12px;display:flex;flex-wrap:wrap;gap:6px;padding:8px}
+.legend{position:absolute;left:12px;bottom:12px;right:190px;display:flex;flex-wrap:wrap;gap:6px;padding:8px}
 .legend button{display:flex;align-items:center;gap:7px;border:1px solid transparent;background:transparent;border-radius:99px;padding:4px 10px 4px 6px;font-size:12.5px;font-weight:550}
 .legend button:hover{background:var(--surface2)}
 .legend button[aria-pressed=false]{opacity:.45;text-decoration:line-through}
 .legend .sw{width:14px;height:14px;border-radius:5px;border:1px solid color-mix(in srgb,var(--fg) 20%,transparent)}
 @media (max-width:899px){
-  .legend{right:12px;left:12px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .legend{right:48px;left:12px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
   .legend button{white-space:nowrap}
 }
 
@@ -273,7 +286,7 @@ dd.none{color:var(--muted)}
 .door-arc{fill:none;stroke:var(--wall);stroke-width:1.5;stroke-dasharray:4 3;opacity:.8}
 .entry-gap{stroke:var(--floor);stroke-width:16}
 
-.mk{transform:scale(var(--u,1))}
+.mk{transform:rotate(var(--rot,0deg)) scale(var(--u,1))}
 .spot{cursor:pointer}
 .spot circle{fill:var(--surface);stroke:var(--accent);stroke-width:1.5}
 .spot text{font-size:7.5px;font-weight:800;fill:var(--accent);pointer-events:none}
@@ -334,7 +347,7 @@ dd.none{color:var(--muted)}
 
 <header class="topbar">
   <div class="logo"><span class="ico" id="logoico"></span></div>
-  <div class="brand"><b id="title">Stokes Hall</b><span>Indoor map</span></div>
+  <div class="brand"><b id="title">Stokes Hall</b><span>Campus map</span></div>
   <span class="pill" id="level"></span>
   <span class="spacer"></span>
   <span class="pill hot hide-sm">Proof of concept</span>
@@ -347,8 +360,8 @@ dd.none{color:var(--muted)}
       <div class="fields">
         <div class="field" id="fromfield">
           <span class="pin from"></span>
-          <label for="from">I'm entering from</label>
-          <select id="from"><option value="">Choose an entrance</option></select>
+          <label for="from">Starting from</label>
+          <select id="from"><option value="">Choose where you start</option></select>
           <span class="chev ico" id="chev"></span>
         </div>
         <div class="field">
@@ -375,7 +388,8 @@ dd.none{color:var(--muted)}
 
   <main class="stage">
     <div class="mapwrap">
-      <svg id="map" role="group" aria-label="Floor plan. Drag to pan, scroll or pinch to zoom."></svg>
+      <div id="world"></div>
+      <svg id="map" role="group" aria-label="Floor plan of Stokes Hall, placed on the campus map"></svg>
       <div class="maptools">
         <label class="glass"><input type="checkbox" id="shownet"> Show path network</label>
         <div class="glass netkey" id="netkey"><span><i></i>Traced</span><span><i class="g"></i>Guessed</span></div>
@@ -384,7 +398,7 @@ dd.none{color:var(--muted)}
         <button id="locate" type="button" aria-pressed="false" aria-label="Show my location" title="Show my location"><span class="ico" id="locico"></span></button>
         <button id="zin" aria-label="Zoom in">+</button>
         <button id="zout" aria-label="Zoom out">&minus;</button>
-        <button id="zreset" class="all" aria-label="Show the whole floor">All</button>
+        <button id="zreset" class="all" aria-label="Show the whole building" title="Show the whole building">All</button>
       </div>
       <div class="floors glass" id="floors" role="group" aria-label="Choose a floor"></div>
       <div class="levelbar glass" id="levelbar" aria-live="polite"></div>
@@ -395,6 +409,9 @@ dd.none{color:var(--muted)}
 
 <script src="data.js"></script>
 <script src="logic.js"></script>
+<script src="campus/config.js"></script>
+<script src="campus/data.js"></script>
+<script src="vendor/maplibre-gl-5.24.0/maplibre-gl.js"></script>
 <script>
 (function () {
   var B = window.BUILDING, ROOMS = window.ROOMS, SPOTS = window.SPOTS;
@@ -447,14 +464,12 @@ dd.none{color:var(--muted)}
   var $ = function (id) { return document.getElementById(id); };
   var svg = $('map'), input = $('q');
   var sel = null, hidden = {}, query = '', moved = false, from = '', accessible = false;
-  var route = null, dirs = null, viaQuick = '', active = -1, shown = [];
+  var route = null, dirs = null, outRoute = null, viaQuick = '', active = -1, shown = [];
   var roomEls = {}, spotEls = {}, entrEls = {};
-  var layerNet, layerRoute, layerYou;
+  var layerNet, layerRoute;
   var you = null, locOn = false, watchId = null, smoother = null, locNote = null, centered = false;
   var geo = ML.fitGeo((window.GEO || {}).points);
   var SIM = readUrl().sim === '1'; // ?sim=1: tap the map to place a pretend location (no GPS needed)
-  var view = { cx: FULL.x + FULL.w / 2, cy: FULL.y + FULL.h / 2, w: FULL.w };
-  var anim = 0;
 
   function h(tag, attrs, kids) {
     var e = document.createElement(tag);
@@ -632,6 +647,8 @@ dd.none{color:var(--muted)}
   }
 
   function draw() {
+    svg.setAttribute('viewBox', FULL.x + ' ' + FULL.y + ' ' + FULL.w + ' ' + FULL.h);
+    svg.setAttribute('width', FULL.w); svg.setAttribute('height', FULL.h);
     var defs = el('defs', {}, svg);
     var pat = el('pattern', { id: 'dots', width: 48, height: 48, patternUnits: 'userSpaceOnUse' }, defs);
     el('circle', { 'class': 'dot', cx: 2, cy: 2, r: 2 }, pat);
@@ -639,7 +656,6 @@ dd.none{color:var(--muted)}
     el('feDropShadow', { dx: 0, dy: 10, stdDeviation: 14, 'flood-color': '#000', 'flood-opacity': 0.16 }, f);
     var mk = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 6, refY: 5, markerWidth: 5, markerHeight: 5, orient: 'auto-start-reverse' }, defs);
     el('path', { d: 'M0 0L10 5L0 10z', 'class': 'arrowhead' }, mk);
-    el('rect', { x: -1500, y: -1500, width: 6000, height: 5000, 'class': 'bgrid' }, svg);
     LEVELS.forEach(function (L) { base[L.id] = el('g', { 'class': 'lvl', 'data-level': L.id }, svg); });
 
     // Outside walls, buttresses and the building floor, one floor at a time.
@@ -727,7 +743,6 @@ dd.none{color:var(--muted)}
       entrEls[en.id] = g;
     });
 
-    layerYou = el('g', { id: 'layer-you', 'aria-hidden': 'true' }, svg); // on top of everything
   }
 
   // Draws the hallway lines of the floor on screen. Stairs and elevators that lead to another
@@ -799,48 +814,65 @@ dd.none{color:var(--muted)}
     el('circle', { 'class': 'route-end-dot', cx: 0, cy: 0, r: 2.6 }, mk);
   }
 
-  // ---------- View: pan, zoom, animated framing ----------
-  function ratio() { var w = svg.clientWidth, hh = svg.clientHeight; return (w && hh) ? hh / w : FULL.h / FULL.w; }
-  function allW() { return Math.max(FULL.w, FULL.h / ratio()); }
-  function clampView(v) {
-    v.w = Math.max(300, Math.min(allW() * 1.05, v.w));
-    v.cx = Math.max(FULL.x, Math.min(FULL.x + FULL.w, v.cx));
-    v.cy = Math.max(FULL.y, Math.min(FULL.y + FULL.h, v.cy));
-    return v;
+  // ---------- View: the floor plan sits on the real campus map ----------
+  // The campus map (MapLibre) owns the camera: dragging, pinching and scrolling all move it.
+  // The floor plan is the same drawing as before, laid on top of the map and moved with it: on every
+  // map move we work out where three plan points land on screen and set one CSS transform.
+  // geo (from GEO in data.js) turns plan x, y into latitude/longitude and back.
+  var map = null, u = 1, geoParked = false;
+  if (!geo) {
+    // Not tied to GPS yet: park the plan at the campus centre, drawn to scale, so the page still works.
+    var C0 = (window.CAMPUS || {}).center || [-71.1685, 42.3355], m0 = SCALE.feetPerUnit * 0.3048;
+    var f0 = ML.localFrame(C0[1], C0[0]), a0 = f0.toLatLng(0, 0), b0 = f0.toLatLng(1000 * m0, 0);
+    geo = ML.fitGeo([{ x: FULL.x, y: FULL.y, lat: a0.lat, lng: a0.lng }, { x: FULL.x + 1000, y: FULL.y, lat: b0.lat, lng: b0.lng }]);
+    geoParked = true;
   }
+  var OVERLAY_MIN_ZOOM = 16.5; // zoomed out further than this, the building shows as a simple shape
+
+  function toLngLat(x, y) { var g = geo.toGeo(x, y); return [g.lng, g.lat]; }
+  function toPlan(lng, lat) { return geo.toMap(lat, lng); }
+
   function applyView() {
-    var w = view.w, hh = w * ratio();
-    svg.setAttribute('viewBox', (view.cx - w / 2) + ' ' + (view.cy - hh / 2) + ' ' + w + ' ' + hh);
-    svg.classList.toggle('z-in', w < 1300);
-    // Units per screen pixel. Markers and the route line use it to stay the same size on screen.
-    if (svg.clientWidth) { svg.style.setProperty('--u', (w / svg.clientWidth).toFixed(4)); }
-  }
-  function goTo(t, animate) {
-    cancelAnimationFrame(anim);
-    t = clampView(t);
-    if (!animate || REDUCED) { view = t; applyView(); return; }
-    var s = { cx: view.cx, cy: view.cy, w: view.w }, t0 = performance.now(), dur = 600;
-    (function step(now) {
-      var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
-      view = { cx: s.cx + (t.cx - s.cx) * e, cy: s.cy + (t.cy - s.cy) * e, w: s.w + (t.w - s.w) * e };
-      applyView();
-      if (k < 1) { anim = requestAnimationFrame(step); }
-    })(t0);
-  }
-  function showAll(animate) { goTo({ cx: FULL.x + FULL.w / 2, cy: FULL.y + FULL.h / 2, w: allW() }, animate); }
-  function zoomBy(f, px, py) {
-    if (px == null) { px = view.cx; py = view.cy; }
-    cancelAnimationFrame(anim);
-    var nw = Math.max(300, Math.min(allW() * 1.05, view.w * f)), k = nw / view.w;
-    view = clampView({ cx: px - (px - view.cx) * k, cy: py - (py - view.cy) * k, w: nw });
-    applyView();
-  }
-  function toWorld(clientX, clientY) {
-    var r = svg.getBoundingClientRect(), w = view.w, hh = w * ratio();
-    return { x: view.cx - w / 2 + ((clientX - r.left) / r.width) * w, y: view.cy - hh / 2 + ((clientY - r.top) / r.height) * hh };
+    if (!map) { return; }
+    var p0 = map.project(toLngLat(FULL.x, FULL.y)), px = map.project(toLngLat(FULL.x + 1000, FULL.y)), py = map.project(toLngLat(FULL.x, FULL.y + 1000));
+    var a = (px.x - p0.x) / 1000, b = (px.y - p0.y) / 1000, c = (py.x - p0.x) / 1000, d = (py.y - p0.y) / 1000;
+    svg.style.transform = 'matrix(' + [a, b, c, d, p0.x, p0.y].join(',') + ')';
+    // Units per screen pixel (markers and lines use it to keep a steady size on screen), and the turn
+    // that labels undo so they stay upright.
+    u = 1 / Math.sqrt(a * a + b * b);
+    svg.style.setProperty('--u', u.toFixed(4));
+    svg.style.setProperty('--rot', (-Math.atan2(b, a) * 180 / Math.PI).toFixed(2) + 'deg');
+    svg.classList.toggle('z-in', u < 1.3);
+    svg.classList.toggle('labels', u < 3.6);
+    svg.style.display = map.getZoom() >= OVERLAY_MIN_ZOOM ? '' : 'none';
   }
 
-  // Zooms to the chosen room and the whole route, or to the chosen entrance.
+  // Moves the camera so a box on the plan ([x0, y0, x1, y1] in plan units) fills the view.
+  function fitPlanBox(b, padding, maxZoom) {
+    if (!map) { return; }
+    var bounds = null;
+    [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]].forEach(function (p) {
+      var ll = toLngLat(p[0], p[1]);
+      if (!bounds) { bounds = new maplibregl.LngLatBounds(ll, ll); } else { bounds.extend(ll); }
+    });
+    var w = map.getContainer().clientWidth, hh = map.getContainer().clientHeight;
+    var pad = Math.min(padding, w / 4, hh / 4);
+    map.fitBounds(bounds, { padding: pad, maxZoom: maxZoom || 20.5, duration: REDUCED ? 0 : 700 });
+  }
+  function planBox() {
+    var pts = [];
+    OUTLINES.forEach(function (o) { if (lv(o) === '1') { pts = pts.concat(o.points); } });
+    var b = boxOf(pts);
+    return [b.x, b.y, b.x + b.w, b.y + b.h];
+  }
+  function showAll() { fitPlanBox(planBox(), 40, 19.2); }
+  function zoomBy(f) { if (!map) { return; } if (f < 1) { map.zoomIn(); } else { map.zoomOut(); } }
+  function toWorld(clientX, clientY) {
+    var r = map.getContainer().getBoundingClientRect(), ll = map.unproject([clientX - r.left, clientY - r.top]);
+    return toPlan(ll.lng, ll.lat);
+  }
+
+  // Zooms to the chosen room and the whole route (indoors and outdoors), or to the chosen entrance.
   function frame() {
     var b = null;
     function grow(x0, y0, x1, y1) {
@@ -852,10 +884,121 @@ dd.none{color:var(--muted)}
       if (sel.kind === 'room') { grow(o._box.x, o._box.y, o._box.x + o._box.w, o._box.y + o._box.h); } else { grow(o.x - 50, o.y - 50, o.x + 50, o.y + 50); }
     }
     if (route) { route.points.forEach(function (p, i) { if (route.levels[i] === curLevel) { grow(p[0], p[1], p[0], p[1]); } }); }
-    else if (from && lv(entranceById(from)) === curLevel) { var en = entranceById(from); grow(en.x - 150, en.y - 150, en.x + 150, en.y + 150); }
+    if (outRoute) { outRoute.lnglat.forEach(function (ll) { var p = toPlan(ll[0], ll[1]); grow(p.x, p.y, p.x, p.y); }); }
+    else if (!route && from && entranceById(from) && lv(entranceById(from)) === curLevel) {
+      var en = entranceById(from); grow(en.x - 150, en.y - 150, en.x + 150, en.y + 150);
+    }
     if (!b) { return; }
-    var pad = route ? 150 : 210, bw = b[2] - b[0] + pad * 2, bh = b[3] - b[1] + pad * 2;
-    goTo({ cx: (b[0] + b[2]) / 2, cy: (b[1] + b[3]) / 2, w: Math.max(bw, bh / ratio(), route ? 850 : 780) }, true);
+    var pad = 80;
+    // Never zoom in so far that a small room fills the screen.
+    var minSize = 1000;
+    if (b[2] - b[0] < minSize) { var cx = (b[0] + b[2]) / 2; b[0] = cx - minSize / 2; b[2] = cx + minSize / 2; }
+    if (b[3] - b[1] < minSize) { var cy = (b[1] + b[3]) / 2; b[1] = cy - minSize / 2; b[3] = cy + minSize / 2; }
+    fitPlanBox(b, pad);
+  }
+
+  // ---------- Campus map ----------
+  var CAMPUS = window.CAMPUS || {}, CDATA = window.CAMPUS_DATA || {};
+  var EMPTY = { type: 'FeatureCollection', features: [] };
+  var BASEMAPS = {
+    // OpenStreetMap's own tiles: fine while building and testing, not for a real launch (see campus/README.md).
+    'osm-dev': { tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], maxzoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }
+  };
+
+  function ring(points) {
+    var r = points.map(function (p) { return toLngLat(p[0], p[1]); });
+    r.push(r[0]);
+    return r;
+  }
+  // The traced building outline, placed on the map. Shown as a maroon shape when zoomed out.
+  function footprint() {
+    return { type: 'FeatureCollection', features: OUTLINES.filter(function (o) { return lv(o) === '1'; }).map(function (o) {
+      return { type: 'Feature', properties: { name: B.name }, geometry: { type: 'Polygon', coordinates: [ring(o.points)] } };
+    }) };
+  }
+
+  function initMap() {
+    var bm = BASEMAPS[CAMPUS.basemap] || BASEMAPS['osm-dev'];
+    map = new maplibregl.Map({
+      container: 'world',
+      center: toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2), zoom: 17.6, maxZoom: 22, maxPitch: 0,
+      attributionControl: false, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+      style: { version: 8, sources: { base: { type: 'raster', tiles: bm.tiles, tileSize: 256, maxzoom: bm.maxzoom, attribution: bm.attribution } },
+        layers: [{ id: 'base', type: 'raster', source: 'base' }] }
+    });
+    map.touchZoomRotate.disableRotation(); // north stays up; the plan turns, its labels do not
+    map.keyboard.disableRotation();
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+    map.getCanvasContainer().appendChild(svg); // the floor plan moves with the map
+    window.mapbcMap = map; // handy for testing and for poking at the map from the browser console
+    map.on('move', applyView);
+    map.on('resize', applyView);
+    map.on('click', onMapClick);
+    applyView();
+  }
+
+  function addCampusLayers() {
+    map.addSource('buildings', { type: 'geojson', data: CDATA.buildings || EMPTY });
+    map.addSource('paths', { type: 'geojson', data: CDATA.paths || EMPTY });
+    map.addSource('foot', { type: 'geojson', data: footprint() });
+    map.addSource('route-out', { type: 'geojson', data: EMPTY });
+    map.addSource('you-acc', { type: 'geojson', data: EMPTY });
+
+    map.addLayer({ id: 'buildings', type: 'fill', source: 'buildings', paint: { 'fill-color': '#6b7a90', 'fill-opacity': 0.18 } });
+    map.addLayer({ id: 'buildings-line', type: 'line', source: 'buildings', paint: { 'line-color': '#5b6678', 'line-width': 1 } });
+    // Walking paths. Steps are dashed red so you can see where a route is not step-free.
+    map.addLayer({ id: 'paths', type: 'line', source: 'paths', filter: ['!=', ['get', 'highway'], 'steps'],
+      paint: { 'line-color': '#2b6cb0', 'line-opacity': 0.45, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1, 20, 4] } });
+    map.addLayer({ id: 'paths-steps', type: 'line', source: 'paths', filter: ['==', ['get', 'highway'], 'steps'],
+      paint: { 'line-color': '#c0392b', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 20, 5], 'line-dasharray': [1, 1] } });
+    map.addLayer({ id: 'foot', type: 'fill', source: 'foot', maxzoom: OVERLAY_MIN_ZOOM, paint: { 'fill-color': '#8c1d2f', 'fill-opacity': 0.55 } });
+    map.addLayer({ id: 'foot-line', type: 'line', source: 'foot', maxzoom: OVERLAY_MIN_ZOOM, paint: { 'line-color': '#8c1d2f', 'line-width': 1.5 } });
+    map.addLayer({ id: 'you-acc', type: 'fill', source: 'you-acc', paint: { 'fill-color': '#0a6cff', 'fill-opacity': 0.12 } });
+    map.addLayer({ id: 'you-acc-line', type: 'line', source: 'you-acc', paint: { 'line-color': '#0a6cff', 'line-opacity': 0.4, 'line-width': 1 } });
+    // The outdoor part of a route: solid along walkways, dashed when it is only a straight line.
+    map.addLayer({ id: 'route-out-casing', type: 'line', source: 'route-out', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#ffffff', 'line-width': 9, 'line-opacity': 0.9 } });
+    map.addLayer({ id: 'route-out', type: 'line', source: 'route-out', filter: ['!', ['get', 'straight']], layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#0a6cff', 'line-width': 5 } });
+    map.addLayer({ id: 'route-out-straight', type: 'line', source: 'route-out', filter: ['get', 'straight'], layout: { 'line-cap': 'round' },
+      paint: { 'line-color': '#0a6cff', 'line-width': 4, 'line-dasharray': [1.5, 1.5] } });
+
+    map.on('click', 'foot', function () { showAll(); });
+    map.on('mouseenter', 'foot', function () { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'foot', function () { map.getCanvas().style.cursor = ''; });
+    mapTheme();
+  }
+
+  // Dark mode for the base map: flip its brightness and turn the colours back round.
+  function mapTheme() {
+    if (!map || !map.getLayer('base')) { return; }
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    map.setPaintProperty('base', 'raster-brightness-min', dark ? 0.9 : 0);
+    map.setPaintProperty('base', 'raster-brightness-max', dark ? 0.12 : 1);
+    map.setPaintProperty('base', 'raster-saturation', dark ? -0.55 : 0);
+    map.setPaintProperty('base', 'raster-hue-rotate', dark ? 180 : 0);
+  }
+
+  function drawOutRoute() {
+    if (!map || !map.getSource('route-out')) { return; }
+    map.getSource('route-out').setData(outRoute ? { type: 'FeatureCollection', features: [
+      { type: 'Feature', properties: { straight: !!outRoute.straight }, geometry: { type: 'LineString', coordinates: outRoute.lnglat } }] } : EMPTY);
+  }
+
+  // A tap on the map: select the room, entrance or photo point under the finger. MapLibre only sends
+  // "click" when the map was not dragged, so a pan never selects anything by accident.
+  function onMapClick(e) {
+    var r = map.getContainer().getBoundingClientRect();
+    if (SIM && locOn) {
+      // Test mode: while the locate button is on, a tap places a pretend location (anywhere on campus).
+      var p = toPlan(e.lngLat.lng, e.lngLat.lat);
+      setYou({ x: p.x, y: p.y, accuracy: 8 });
+      return;
+    }
+    var t = document.elementFromPoint(r.left + e.point.x, r.top + e.point.y);
+    var m = t && svg.contains(t) ? pick(t) : null;
+    if (m) { act(m); }
   }
 
   // ---------- Floors ----------
@@ -910,14 +1053,86 @@ dd.none{color:var(--muted)}
     return (ft < 50 ? Math.max(5, Math.round(ft / 5) * 5) : Math.round(ft / 10) * 10) + ' ft';
   }
 
+  // The blue dot is a marker on the campus map, so it shows anywhere on campus, not just on the plan.
+  // The faint circle around it is how far off the GPS might be.
+  var youMarker = null;
   function drawYou() {
-    layerYou.textContent = '';
-    if (!you || !you.inside || you.level !== curLevel) { return; }
-    var g = el('g', { transform: 'translate(' + you.x + ' ' + you.y + ')' }, layerYou);
-    el('circle', { 'class': 'you-acc', cx: 0, cy: 0, r: Math.min(you.radius, 600) }, g);
-    var mk = el('g', { 'class': 'mk' }, g);
-    el('circle', { 'class': 'you-ring', cx: 0, cy: 0, r: 9 }, mk);
-    el('circle', { 'class': 'you-dot', cx: 0, cy: 0, r: 7.5 }, mk);
+    if (!map) { return; }
+    if (!you) {
+      if (youMarker) { youMarker.remove(); youMarker = null; }
+      if (map.getSource('you-acc')) { map.getSource('you-acc').setData(EMPTY); }
+      return;
+    }
+    var ll = toLngLat(you.x, you.y);
+    if (!youMarker) {
+      var dot = document.createElement('div');
+      dot.className = 'you-dot-el';
+      dot.setAttribute('aria-label', 'Your location');
+      youMarker = new maplibregl.Marker({ element: dot }).setLngLat(ll).addTo(map);
+    } else { youMarker.setLngLat(ll); }
+    if (map.getSource('you-acc')) {
+      var fr = ML.localFrame(ll[1], ll[0]), r = Math.min(you.accuracyMeters, 150), c = [];
+      for (var i = 0; i <= 48; i++) { var g = fr.toLatLng(r * Math.cos(i / 48 * 2 * Math.PI), r * Math.sin(i / 48 * 2 * Math.PI)); c.push([g.lng, g.lat]); }
+      map.getSource('you-acc').setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [c] } }] });
+    }
+  }
+
+  // ---------- Routes that start from your location ----------
+  // The campus walkways (campus/data.js) become a path network once, in metres around the building.
+  var outFrame = null, outNet = null;
+  function outdoorNet() {
+    if (!outNet) {
+      var c = toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2);
+      outFrame = ML.localFrame(c[1], c[0]);
+      outNet = ML.outdoorNetwork(CDATA.paths, outFrame);
+    }
+    return outNet;
+  }
+  function groundEntrances() { return ENTRANCES.filter(function (en) { return lv(en) === LEVELS[0].id; }); }
+
+  // Plans the whole trip from your location to a target: along the walkways to the best door, then inside.
+  // Returns null if it cannot (no location yet, or no door leads there).
+  function planFromYou(target) {
+    if (!you) { return null; }
+    var net = outdoorNet(), doors = groundEntrances(), here = toLngLat(you.x, you.y);
+    var start = outFrame.toXY(here[1], here[0]);
+    var places = { start: start, entrances: {} };
+    var pts = [{ id: 'START', name: 'Your location', x: start.x, y: start.y }];
+    doors.forEach(function (en) {
+      var ll = toLngLat(en.x, en.y), p = outFrame.toXY(ll[1], ll[0]);
+      places.entrances[en.id] = p;
+      pts.push({ id: en.id, name: en.name, x: p.x, y: p.y });
+    });
+    var out = net.edges.length ? ML.buildGraph(net, [], pts, []) : null;
+    var best = ML.campusRoute(out, graph, doors.map(function (en) { return en.id; }), target, places, metersPerUnit(), { accessible: accessible });
+    if (best) { best.out = out; }
+    return best;
+  }
+
+  var lastRouteFix = null;
+  function routeFromYou() {
+    if (!you || !sel) { return; }
+    // Inside the building GPS is too rough to steer by, so start from the nearest door instead.
+    if (you.inside && you.nearest) {
+      route = ML.routeTo(graph, you.nearest.id, sel, { accessible: accessible });
+      if (route) {
+        dirs = ML.describe(graph, route, titleOf(sel), { feetPerUnit: SCALE.feetPerUnit, levelNames: LEVEL_NAMES });
+        outRoute = { inside: true, entrance: you.nearest.id, lnglat: [], feet: 0 };
+      }
+      return;
+    }
+    var best = planFromYou(sel);
+    if (!best) { return; }
+    route = best.indoor;
+    dirs = ML.describe(graph, route, titleOf(sel), { feetPerUnit: SCALE.feetPerUnit, levelNames: LEVEL_NAMES });
+    var en = entranceById(best.entrance);
+    outRoute = {
+      straight: best.straight, entrance: best.entrance,
+      feet: Math.round(best.outdoor.length * 3.28084 / 5) * 5,
+      lnglat: best.outdoor.points.map(function (p) { var g = outFrame.toLatLng(p[0], p[1]); return [g.lng, g.lat]; }),
+      steps: best.straight ? null : ML.describe(best.out, best.outdoor, en.name, { feetPerUnit: 3.28084, fallbackName: 'the path' }).steps
+    };
+    lastRouteFix = { x: you.x, y: you.y };
   }
 
   function setLocBtn() { $('locate').setAttribute('aria-pressed', locOn ? 'true' : 'false'); }
@@ -959,10 +1174,15 @@ dd.none{color:var(--muted)}
     locNote = null;
     drawYou(); renderLoc();
     // First good fix: show the dot (not every fix, or the map would fight your fingers).
-    if (you.inside && !centered && !SIM) {
+    if (!centered && !SIM && map) {
       centered = true;
-      if (curLevel !== '1') { showLevel('1'); }
-      goTo({ cx: you.x, cy: you.y, w: 900 }, true);
+      if (you.inside && curLevel !== '1') { showLevel('1'); }
+      map.easeTo({ center: toLngLat(you.x, you.y), zoom: Math.max(map.getZoom(), 18), duration: REDUCED ? 0 : 700 });
+    }
+    // Following your location: redo the route when you have moved about 5 m (not on every GPS jiggle).
+    if (from === 'ME' && sel) {
+      var moved5 = !lastRouteFix || Math.hypot(you.x - lastRouteFix.x, you.y - lastRouteFix.y) * metersPerUnit() > 5;
+      if (moved5) { update(!lastRouteFix); }
     }
   }
 
@@ -1001,7 +1221,7 @@ dd.none{color:var(--muted)}
       renderLoc();
       return;
     }
-    if (!geo) {
+    if (geoParked) {
       locNote = { kind: 'warn', text: 'The map is not tied to real GPS positions yet, so it cannot place a blue dot. Add control points to GEO in data.js (see HANDOFF.md). To try the dot now, open this page with ?sim=1 on the end of the link.' };
       renderLoc();
       return;
@@ -1072,6 +1292,7 @@ dd.none{color:var(--muted)}
   function renderRouteCard() {
     var box = $('routecard');
     box.textContent = '';
+    if (from === 'ME') { renderYouCard(box); return; }
     var en = entranceById(from);
     if (!en && !sel) {
       box.appendChild(h('div', { 'class': 'empty' }, [
@@ -1079,7 +1300,7 @@ dd.none{color:var(--muted)}
         h('div', {}, [h('h2', { text: 'Plan a route' }), h('p', { text: 'Directions appear here, with a line drawn on the map.' })])
       ]));
       box.appendChild(h('ul', { 'class': 'hintlist' }, [
-        h('li', {}, [h('i', { text: '1' }), 'Pick the entrance you are coming in through'] ),
+        h('li', {}, [h('i', { text: '1' }), 'Pick where you start: your location or an entrance'] ),
         h('li', {}, [h('i', { text: '2' }), 'Search a room, or tap one on the map'])
       ]));
       return;
@@ -1143,6 +1364,63 @@ dd.none{color:var(--muted)}
     var notes = [];
     if (SCALE.guess) { notes.push('Distances and times are rough estimates until the map scale is measured on site.'); }
     notes.push('Door positions and some hallways are traced from a brochure and not checked on site yet' + (route.usesGuess ? ', including parts of this route (orange dashes under "Show path network").' : '.'));
+    box.appendChild(h('p', { 'class': 'fine', text: notes.join(' ') }));
+  }
+
+  // The route card when starting from your location: outdoors to the door, then the indoor steps.
+  function renderYouCard(box) {
+    if (!sel) {
+      box.appendChild(h('h2', { text: 'Starting from your location' }));
+      box.appendChild(h('p', { 'class': 'fine', text: 'Now search for a room above, or tap one on the map.' }));
+      return;
+    }
+    if (!you) {
+      box.appendChild(h('h2', { text: 'Finding your location' }));
+      box.appendChild(h('p', { 'class': 'fine', text: SIM ? 'Test mode: tap the map to place a pretend location.' : 'Allow location when the browser asks. It is quicker outside.' }));
+      return;
+    }
+    if (!route) {
+      box.appendChild(h('h2', { text: 'No route found' }));
+      box.appendChild(h('div', { 'class': 'callout', text: accessible ? 'No step-free way in from here in the map data.' : 'No way in from here in the map data.' }));
+      return;
+    }
+    var outFeet = outRoute ? outRoute.feet : 0, levelSteps = dirs.steps.filter(function (s) { return s.kind === 'level'; }).length;
+    var total = outFeet + dirs.feet, mins = Math.max(1, Math.round(total / 240 + levelSteps * 0.6));
+    box.appendChild(h('div', { 'class': 'sum' }, [
+      h('div', { 'class': 'big' }, [String(mins), h('small', { text: 'min walk' })]),
+      h('div', { 'class': 'dist', text: '≈ ' + (total >= 1000 ? (total / 5280).toFixed(1) + ' mi' : total + ' ft') })
+    ]));
+    var badges = h('div', { 'class': 'badges' }, [h('span', { 'class': 'badge info', text: 'From your location' })]);
+    if (viaQuick) { badges.appendChild(h('span', { 'class': 'badge info', text: 'Nearest ' + viaQuick })); }
+    if (accessible) { badges.appendChild(h('span', { 'class': 'badge ok', text: 'Step-free' })); }
+    if (outRoute && outRoute.straight) { badges.appendChild(h('span', { 'class': 'badge warn', text: 'Straight line outside' })); }
+    if (route.usesGuess) { badges.appendChild(h('span', { 'class': 'badge warn', text: 'Includes unchecked hallway' })); }
+    box.appendChild(badges);
+
+    var ol = h('ol', { 'class': 'steps' }), door = entranceById(outRoute.entrance);
+    function addStep(kind, ic, text, feet, tag) {
+      ol.appendChild(h('li', { 'class': 'step ' + kind }, [icon(ic), h('span', { 'class': 'txt' }, [text, tag ? h('span', { 'class': 'tag', text: tag }) : null]), h('span', { 'class': 'ft', text: feet ? feet + ' ft' : '' })]));
+    }
+    if (outRoute.inside) {
+      addStep('start', 'start', 'You seem to be inside. Starting from the nearest door: ' + door.name, 0);
+    } else if (outRoute.straight) {
+      addStep('start', 'start', 'Start at your location', 0);
+      addStep('walk', 'straight', 'Walk to the ' + door.name + ' (straight-line distance)', outFeet, 'Outside');
+    } else {
+      outRoute.steps.forEach(function (s) {
+        if (s.kind === 'start') { addStep('start', 'start', 'Start at your location', 0); return; }
+        addStep('walk', s.kind === 'arrive' ? (s.turn === 'straight' ? 'straight' : s.turn) : (s.turn || 'straight'), s.text, s.feet, 'Outside');
+      });
+    }
+    dirs.steps.forEach(function (s) {
+      if (s.kind === 'start') { if (!outRoute.inside) { addStep('walk', 'start', 'Go in at the ' + door.name, 0); } return; }
+      var ic = s.kind === 'arrive' ? 'arrive' : (s.turn || 'straight');
+      addStep(s.kind, ic, s.text, s.feet);
+    });
+    box.appendChild(ol);
+    var notes = [];
+    if (outRoute.straight) { notes.push('The campus walkways are not loaded yet, so the outdoor part is a straight line, not a walking route. See campus/README.md to load them.'); }
+    notes.push('Your location comes from the phone and can be off by a few metres, more near tall buildings.');
     box.appendChild(h('p', { 'class': 'fine', text: notes.join(' ') }));
   }
 
@@ -1221,8 +1499,9 @@ dd.none{color:var(--muted)}
 
   // ---------- State changes ----------
   function findRoute() {
-    route = null; dirs = null;
+    route = null; dirs = null; outRoute = null;
     if (!sel || !from) { return; }
+    if (from === 'ME') { routeFromYou(); return; }
     route = ML.routeTo(graph, from, sel, { accessible: accessible });
     if (route) { dirs = ML.describe(graph, route, titleOf(sel), { feetPerUnit: SCALE.feetPerUnit, levelNames: LEVEL_NAMES }); }
   }
@@ -1231,9 +1510,10 @@ dd.none{color:var(--muted)}
     findRoute();
     if (reframe) {
       // Show the floor where the route starts, else the chosen room's floor, else the entrance's.
-      var target = route ? route.levels[0] : (sel ? lv(sel.o) : (from ? lv(entranceById(from)) : curLevel));
+      var target = route ? route.levels[0] : (sel ? lv(sel.o) : (entranceById(from) ? lv(entranceById(from)) : curLevel));
       showLevel(target);
     } else { drawRoute(); renderBanner(); }
+    drawOutRoute();
     renderRouteCard(); renderDetail(); renderPhoto(); renderLoc();
     refreshStyles(); renderResults();
     saveUrl();
@@ -1248,7 +1528,9 @@ dd.none{color:var(--muted)}
   }
 
   function setFrom(id) {
-    from = entranceById(id) ? id : '';
+    from = entranceById(id) || id === 'ME' ? id : '';
+    lastRouteFix = null;
+    if (from === 'ME' && !you && !locOn) { toggleLocate(); }
     $('from').value = from;
     try { localStorage.setItem('stokes-from', from); } catch (e) { /* storage blocked: fine */ }
     update(true);
@@ -1258,7 +1540,11 @@ dd.none{color:var(--muted)}
   function quick(term, name) {
     var targets = search(term).filter(function (m) { return m.kind === 'room'; });
     if (!targets.length) { return; }
-    if (from) {
+    if (from === 'ME' && you) {
+      var bestT = null, bestM = Infinity;
+      targets.forEach(function (t) { var p = planFromYou(t); if (p && p.meters < bestM) { bestM = p.meters; bestT = t; } });
+      if (bestT) { choose(bestT, name.toLowerCase()); return; }
+    } else if (entranceById(from)) {
       var best = ML.nearest(graph, from, targets, { accessible: accessible });
       if (best) { choose(best.target, name.toLowerCase()); return; }
     }
@@ -1285,6 +1571,7 @@ dd.none{color:var(--muted)}
 
   // ---------- Controls ----------
   function build() {
+    $('from').appendChild(h('option', { value: 'ME', text: 'My location (GPS)' }));
     ENTRANCES.forEach(function (en) { $('from').appendChild(h('option', { value: en.id, text: en.name })); });
     $('from').addEventListener('change', function () { setFrom($('from').value); });
     $('accessible').addEventListener('change', function () { accessible = $('accessible').checked; update(true); });
@@ -1344,54 +1631,12 @@ dd.none{color:var(--muted)}
   function setTheme(t, save) {
     document.documentElement.setAttribute('data-theme', t);
     fillIcon('themeico', t === 'dark' ? 'sun' : 'moon');
+    mapTheme();
     if (save) { try { localStorage.setItem('stokes-theme', t); } catch (e) { /* fine */ } }
   }
 
-  // ---------- Pointer: drag to pan, pinch to zoom, tap to select ----------
-  var ptrs = {}, drag = null, pinch = null;
-  function count() { return Object.keys(ptrs).length; }
-  function mid() { var k = Object.keys(ptrs).map(function (i) { return ptrs[i]; }); return { x: (k[0].x + k[1].x) / 2, y: (k[0].y + k[1].y) / 2, d: Math.hypot(k[0].x - k[1].x, k[0].y - k[1].y) }; }
-  svg.addEventListener('pointerdown', function (e) {
-    cancelAnimationFrame(anim);
-    ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
-    if (count() === 1) { moved = false; drag = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy }; }
-    else if (count() === 2) { var m = mid(); pinch = { d: m.d, w: view.w, at: toWorld(m.x, m.y) }; drag = null; moved = true; }
-  });
-  svg.addEventListener('pointermove', function (e) {
-    if (!ptrs[e.pointerId]) { return; }
-    ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
-    if (pinch && count() === 2) {
-      var m = mid(), r = svg.getBoundingClientRect();
-      var w = Math.max(300, Math.min(allW() * 1.05, pinch.w * pinch.d / Math.max(m.d, 1)));
-      view = clampView({
-        w: w,
-        cx: pinch.at.x - ((m.x - r.left) / r.width - 0.5) * w,
-        cy: pinch.at.y - ((m.y - r.top) / r.height - 0.5) * w * ratio()
-      });
-      applyView();
-    } else if (drag) {
-      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      if (Math.abs(dx) + Math.abs(dy) > 6) { moved = true; }
-      if (moved) {
-        var s = view.w / svg.clientWidth;
-        view = clampView({ cx: drag.cx - dx * s, cy: drag.cy - dy * s, w: view.w });
-        applyView();
-      }
-    }
-  });
-  function lift(e) {
-    delete ptrs[e.pointerId];
-    pinch = null;
-    if (count() === 1) { var k = ptrs[Object.keys(ptrs)[0]]; drag = { x: k.x, y: k.y, cx: view.cx, cy: view.cy }; } else { drag = null; }
-  }
-  window.addEventListener('pointerup', lift);
-  window.addEventListener('pointercancel', lift);
-  svg.addEventListener('wheel', function (e) {
-    e.preventDefault();
-    var p = toWorld(e.clientX, e.clientY);
-    zoomBy(e.deltaY < 0 ? 0.87 : 1.15, p.x, p.y);
-  }, { passive: false });
-
+  // ---------- Tap to select ----------
+  // Dragging, pinching and scrolling are handled by the campus map. Taps are handled in onMapClick.
   function pick(target) {
     var g = target.closest ? target.closest('[data-id],[data-spot],[data-entr]') : null;
     if (!g) { return null; }
@@ -1407,19 +1652,10 @@ dd.none{color:var(--muted)}
   }
   // Tapping a green marker picks that entrance. Tapping a room or photo point selects it.
   function act(m) { if (m.kind === 'entrance') { setFrom(m.id); } else { choose(m); } }
-  svg.addEventListener('click', function (e) {
-    if (moved) { moved = false; return; }
-    // Test mode: while the locate button is on, a tap places the pretend location instead of selecting.
-    if (SIM && locOn) { var w = toWorld(e.clientX, e.clientY); setYou({ x: w.x, y: w.y, accuracy: 8 }); return; }
-    var m = pick(e.target);
-    if (m) { act(m); }
-  });
   svg.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' || e.key === ' ') { var m = pick(e.target); if (m) { e.preventDefault(); act(m); } }
   });
 
-  if (window.ResizeObserver) { new ResizeObserver(function () { applyView(); }).observe(svg); }
-  else { window.addEventListener('resize', applyView); }
 
   // ---------- Start ----------
   draw();
@@ -1429,16 +1665,28 @@ dd.none{color:var(--muted)}
   var start = readUrl(), saved = '', savedTheme = '';
   try { saved = localStorage.getItem('stokes-from') || ''; savedTheme = localStorage.getItem('stokes-theme') || ''; } catch (e) { /* storage blocked: fine */ }
   setTheme(savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
-  from = entranceById(start.from) ? start.from : (entranceById(saved) ? saved : '');
+  from = entranceById(start.from) || start.from === 'ME' ? start.from : (entranceById(saved) ? saved : '');
   $('from').value = from;
   accessible = start.accessible === '1';
   $('accessible').checked = accessible;
   ROOMS.forEach(function (r) { if (r.id === start.room) { sel = { kind: 'room', o: r }; } });
   SPOTS.forEach(function (s) { if (s.id === start.spot) { sel = { kind: 'spot', o: s }; } });
   if (sel) { input.value = titleOf(sel); }
-  showAll(false);
   showLevel(curLevel);
-  update(!!sel);
+  if (window.maplibregl) {
+    initMap();
+    map.on('load', function () {
+      addCampusLayers();
+      drawYou();
+      update(!!sel);
+      if (from === 'ME' && !locOn) { toggleLocate(); }
+    });
+  } else {
+    // The map library did not load (it should be in vendor/). Say so instead of failing silently.
+    $('levelbar').style.display = '';
+    $('levelbar').textContent = 'The map could not load (vendor/maplibre-gl-5.24.0/maplibre-gl.js is missing).';
+  }
+  update(false);
 })();
 </script>
 </body>

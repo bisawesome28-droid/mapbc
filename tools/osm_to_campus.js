@@ -4,9 +4,9 @@
 //   2. Save that file as campus/osm_export.geojson
 //   3. node tools/osm_to_campus.js campus/osm_export.geojson
 //
-// It writes campus/buildings.geojson, campus/paths.geojson and campus/entrances.geojson,
-// and prints a short report of what it found (and what is missing, like buildings with no name).
-// Running it again overwrites those three files, so make hand edits to them only after you are happy with the import.
+// It writes campus/data.js (window.CAMPUS_DATA with buildings, paths and entrances) and prints a short
+// report of what it found (and what is missing, like buildings with no name).
+// Running it again overwrites campus/data.js, so make hand edits only after you are happy with the import.
 //
 // The conversion is in a function so tests.js can check it: require('./tools/osm_to_campus.js').convert(...)
 
@@ -69,6 +69,20 @@ function convert(fc) {
   };
 }
 
+// The page reads window.CAMPUS_DATA from a script file (scripts load from disk; fetch() does not).
+// One feature per line keeps the file readable and git diffs small.
+function toDataJs(out) {
+  function fc(c) {
+    if (!c.features.length) { return '{"type": "FeatureCollection", "features": []}'; }
+    return '{"type": "FeatureCollection", "features": [\n' + c.features.map(function (f) { return '    ' + JSON.stringify(f); }).join(',\n') + '\n  ]}';
+  }
+  return '// Campus data for the outdoor map: buildings, walking paths and building entrances, in GeoJSON.\n' +
+    '// Coordinates are [longitude, latitude] (longitude FIRST, the opposite of Google Maps).\n' +
+    '// Written by tools/osm_to_campus.js from an OpenStreetMap export (see campus/README.md).\n' +
+    '// Data (c) OpenStreetMap contributors, ODbL. Keep the credit on the map.\n' +
+    'window.CAMPUS_DATA = {\n  "buildings": ' + fc(out.buildings) + ',\n  "paths": ' + fc(out.paths) + ',\n  "entrances": ' + fc(out.entrances) + '\n};\n';
+}
+
 function main(file) {
   if (!file) { console.error('Usage: node tools/osm_to_campus.js campus/osm_export.geojson'); process.exit(1); }
   var input;
@@ -76,9 +90,7 @@ function main(file) {
   catch (e) { console.error('Could not read ' + file + ': ' + e.message); process.exit(1); }
   if (!input.features) { console.error(file + ' is not GeoJSON. In Overpass Turbo use Export > GeoJSON, not the raw data.'); process.exit(1); }
   var out = convert(input), dir = path.join(__dirname, '..', 'campus');
-  fs.writeFileSync(path.join(dir, 'buildings.geojson'), JSON.stringify(out.buildings) + '\n');
-  fs.writeFileSync(path.join(dir, 'paths.geojson'), JSON.stringify(out.paths) + '\n');
-  fs.writeFileSync(path.join(dir, 'entrances.geojson'), JSON.stringify(out.entrances) + '\n');
+  fs.writeFileSync(path.join(dir, 'data.js'), toDataJs(out));
   var r = out.report;
   console.log('Buildings: ' + r.buildings + ' (' + r.namedBuildings + ' with a name, ' + (r.buildings - r.namedBuildings) + ' without)');
   console.log('Walking paths: ' + r.paths);
@@ -89,4 +101,4 @@ function main(file) {
 }
 
 if (require.main === module) { main(process.argv[2]); }
-module.exports = { convert: convert };
+module.exports = { convert: convert, toDataJs: toDataJs };
