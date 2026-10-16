@@ -66,3 +66,42 @@ feetPerUnit to real feet divided by 1265. Then set "guess" to false. Time assume
 1. Get real room numbers and door positions (the evacuation floor plans in the building should have them).
 2. Walk the building and fix the guesses listed above. Set "guess": false or "verified": true as you go.
 3. Test with ~5 freshmen against BC's map and log hours per building.
+
+## Project decisions and growth plan
+
+### Project status
+- Stokes Hall Level 1 is traced from the brochure as a real floor plan (walls, doors, stairs, seating).
+  Room IDs S01-S11 and N01-N08 are placeholders. Real numbers go in the "door" field using BC's format
+  (number + wing letter, like 195S).
+- Level 2 is a placeholder floor: outside walls, 5 staircases, 2 elevators, the enclosed bridge, and a
+  hallway skeleton, all guesses. Floors connect through "stair" and "elevator" edges. Step-free routes
+  use elevators only.
+- On Level 1 there is no indoor link between the wings. Routes between wings go outside on the walkway
+  (the enclosed bridge is on Level 2, according to the architect).
+- Still needed:
+  - real room numbers (from the evacuation maps posted in the building)
+  - a walk-through to check door positions and guessed hallways
+  - measuring one hallway to fix the distance scale
+  - a photo of a Level 2 floor plan
+
+### Growth plan (decided)
+- Keep building it as a plain static website on GitHub Pages for now. This scales to lots of users for free.
+- When testing with real students, turn it into an installable web app (a PWA) so it can be added to the
+  home screen and works offline.
+- Only move to the App Store / Google Play (for example by wrapping it with Capacitor) if lots of people
+  use it. Apple costs $99 a year and needs a Mac. Google costs $25 once.
+- Before adding a second building, split the data into one file per building (for example buildings/stokes.json).
+- Once there are a few buildings, build a simple click-to-edit map tool so nobody has to type coordinates by hand.
+- Talk to Boston College early (Facilities, First Year Experience, or student government) about permission
+  and official floor plans, and move away from the traced brochure. Do not use BC's name or brochure in a
+  public app store listing without permission.
+- Loosely follow a standard indoor map format (Apple's IMDF) so the data can be moved to other tools later.
+
+### How we work
+- Two people work on this repo, the owner and a friend, each with their own Claude Code sessions.
+- Each person works on their own branch and merges through pull requests. The other person reviews before merging.
+- Split the work so nobody edits the same file at the same time (especially data.js).
+- Start every session by pulling the latest main.
+- HANDOFF.md is the shared notebook: any important decision goes here so every Claude session knows it.
+- The owner is not an experienced coder. Always explain things in plain language, show a short plan before
+  big changes, and run `node tests.js` before saying something is done.
