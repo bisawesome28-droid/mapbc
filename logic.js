@@ -183,6 +183,30 @@
 
   // ---------- Route finding (Dijkstra's shortest path) ----------
 
+  // A small "binary heap": a list kept in an order where the smallest item is always first.
+  function heapPush(h, item) {
+    h.push(item);
+    for (var i = h.length - 1; i > 0;) {
+      var p = (i - 1) >> 1;
+      if (h[p][0] <= h[i][0]) { break; }
+      var t = h[p]; h[p] = h[i]; h[i] = t; i = p;
+    }
+  }
+  function heapPop(h) {
+    var top = h[0], last = h.pop();
+    if (h.length) {
+      h[0] = last;
+      for (var i = 0; ;) {
+        var l = 2 * i + 1, r = l + 1, m = i;
+        if (l < h.length && h[l][0] < h[m][0]) { m = l; }
+        if (r < h.length && h[r][0] < h[m][0]) { m = r; }
+        if (m === i) { break; }
+        var t = h[m]; h[m] = h[i]; h[i] = t; i = m;
+      }
+    }
+    return top;
+  }
+
   // from: a node id such as 'entrance:E-S-WEST'.
   // targets: a list of node ids; the route ends at whichever is closest.
   // options.accessible: true skips stairs and steps.
@@ -195,24 +219,25 @@
     targets.forEach(function (t) { want[t] = true; });
     var distTo = {}, prev = {}, done = {};
     distTo[from] = 0;
-    var ids = Object.keys(graph.nodes);
-    while (true) {
-      var u = null;
-      for (var i = 0; i < ids.length; i++) {
-        var id = ids[i];
-        if (!done[id] && distTo[id] != null && (u === null || distTo[id] < distTo[u])) { u = id; }
-      }
-      if (u === null) { return null; }
+    // Always look next at the closest place not yet finished. A "heap" keeps them sorted cheaply,
+    // so big outdoor networks (thousands of points) stay fast.
+    var heap = [[0, from]], u = null;
+    while (heap.length) {
+      var top = heapPop(heap);
+      u = top[1];
+      if (done[u] || top[0] > distTo[u]) { u = null; continue; }
       if (want[u]) { break; }
       done[u] = true;
       // Doors and entrances are dead ends: you can start or finish there, not walk through a room.
-      if (u !== from && graph.nodes[u].kind === 'point') { continue; }
+      if (u !== from && graph.nodes[u].kind === 'point') { u = null; continue; }
       graph.adj[u].forEach(function (e) {
         if (accessible && NOT_ACCESSIBLE[e.kind]) { return; }
         var nd = distTo[u] + e.w;
-        if (distTo[e.to] == null || nd < distTo[e.to]) { distTo[e.to] = nd; prev[e.to] = { id: u, edge: e }; }
+        if (distTo[e.to] == null || nd < distTo[e.to]) { distTo[e.to] = nd; prev[e.to] = { id: u, edge: e }; heapPush(heap, [nd, e.to]); }
       });
+      u = null;
     }
+    if (u === null) { return null; }
     var path = [], kinds = [], usesGuess = false, cur = u;
     while (cur) {
       path.unshift(cur);
@@ -513,7 +538,9 @@
   // Returns { nodes, edges } in the same shape as PATHS in data.js, so buildGraph can use it.
   // Lines that share a point (as connected OpenStreetMap ways do) become joined at that point.
   // "steps" paths, and paths tagged wheelchair=no, get kind "steps" so the step-free route avoids them.
-  function outdoorNetwork(paths, frame) {
+  // landmarks (optional): GeoJSON buildings. A path point with no name of its own is named after a
+  // building within 30 m, so directions say "Turn right toward Fulton Hall" instead of "toward the path".
+  function outdoorNetwork(paths, frame, landmarks) {
     var nodes = [], edges = [], byKey = {};
     function nodeAt(c, name) {
       var key = c[0].toFixed(7) + ',' + c[1].toFixed(7);
@@ -537,7 +564,37 @@
         }
       });
     });
+    nameByLandmarks(nodes, landmarks, frame, 30);
     return { nodes: nodes, edges: edges };
+  }
+
+  function nameByLandmarks(nodes, landmarks, frame, maxMeters) {
+    var walls = [];
+    ((landmarks && landmarks.features) || []).forEach(function (f) {
+      var g = f.geometry, name = f.properties && f.properties.name;
+      if (!g || !name) { return; }
+      var polys = g.type === 'Polygon' ? [g.coordinates] : (g.type === 'MultiPolygon' ? g.coordinates : []);
+      polys.forEach(function (poly) {
+        var r = poly[0].map(function (c) { return frame.toXY(c[1], c[0]); });
+        var b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+        r.forEach(function (p) { b.x0 = Math.min(b.x0, p.x); b.y0 = Math.min(b.y0, p.y); b.x1 = Math.max(b.x1, p.x); b.y1 = Math.max(b.y1, p.y); });
+        walls.push({ name: name, ring: r, box: b });
+      });
+    });
+    if (!walls.length) { return; }
+    nodes.forEach(function (n) {
+      if (n.name) { return; }
+      var best = null, bestD = maxMeters;
+      walls.forEach(function (w) {
+        var b = w.box; // skip buildings that are clearly too far away
+        if (n.x < b.x0 - maxMeters || n.x > b.x1 + maxMeters || n.y < b.y0 - maxMeters || n.y > b.y1 + maxMeters) { return; }
+        for (var i = 1; i < w.ring.length; i++) {
+          var d = project(n, w.ring[i - 1], w.ring[i]).d;
+          if (d < bestD) { bestD = d; best = w.name; }
+        }
+      });
+      if (best) { n.name = best; }
+    });
   }
 
   // The best way from a starting point outdoors to a room inside a building.

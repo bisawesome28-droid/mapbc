@@ -367,7 +367,7 @@ dd.none{color:var(--muted)}
         <div class="field">
           <span class="pin to"></span>
           <label for="q">Going to</label>
-          <input id="q" type="search" placeholder="Room number, name, or something like restrooms" autocomplete="off" spellcheck="false" enterkeyhint="search">
+          <input id="q" type="search" placeholder="A room, a building, or something like restrooms" autocomplete="off" spellcheck="false" enterkeyhint="search">
         </div>
       </div>
       <div class="results" id="results" role="listbox" aria-label="Search results" aria-live="polite"></div>
@@ -489,7 +489,7 @@ dd.none{color:var(--muted)}
 
   function labelFor(r) { return r.door ? r.door : (r.label || r.id); }
   function roomTitle(r) { return r.door ? r.door + ' (' + r.name + ')' : r.name; }
-  function titleOf(m) { return m.kind === 'room' ? roomTitle(m.o) : m.o.label; }
+  function titleOf(m) { return m.kind === 'room' ? roomTitle(m.o) : (m.kind === 'building' ? m.o.properties.name : m.o.label); }
   function entranceById(id) {
     for (var i = 0; i < ENTRANCES.length; i++) { if (ENTRANCES[i].id === id) { return ENTRANCES[i]; } }
     return null;
@@ -827,7 +827,14 @@ dd.none{color:var(--muted)}
     geo = ML.fitGeo([{ x: FULL.x, y: FULL.y, lat: a0.lat, lng: a0.lng }, { x: FULL.x + 1000, y: FULL.y, lat: b0.lat, lng: b0.lng }]);
     geoParked = true;
   }
-  var OVERLAY_MIN_ZOOM = 16.5; // zoomed out further than this, the building shows as a simple shape
+  // When the inside of Stokes shows. U_FIT is the zoom (in plan units per screen pixel) at which the whole
+  // building just fits this screen, so the rule works the same on a phone and a laptop:
+  // fully shown when the building is at least about 85% of "fits the screen", hidden below about 60%.
+  var U_FIT = 4;
+  var INSIDE = { hidden: 1.6, full: 1.15 };
+  var INSIDE_ROUTE = { hidden: 3.6, full: 2.6 }; // shows sooner while a route or a room is showing
+  var START_ZOOM_OUT = 1.5; // the page opens this many zoom steps further out than "building fits"
+
 
   function toLngLat(x, y) { var g = geo.toGeo(x, y); return [g.lng, g.lat]; }
   function toPlan(lng, lat) { return geo.toMap(lat, lng); }
@@ -844,20 +851,38 @@ dd.none{color:var(--muted)}
     svg.style.setProperty('--rot', (-Math.atan2(b, a) * 180 / Math.PI).toFixed(2) + 'deg');
     svg.classList.toggle('z-in', u < 1.3);
     svg.classList.toggle('labels', u < 3.6);
-    svg.style.display = map.getZoom() >= OVERLAY_MIN_ZOOM ? '' : 'none';
+    // Zoomed out, Stokes looks like any other building. The inside fades in as you zoom in
+    // (sooner when a route or a room is showing, so the route stays visible).
+    // The rule is "how big is the building on screen", so it works the same on a phone and a laptop.
+    var r = (route || sel) ? INSIDE_ROUTE : INSIDE;
+    var hiddenU = U_FIT * r.hidden, fullU = U_FIT * r.full;
+    var op = Math.max(0, Math.min(1, (hiddenU - u) / (hiddenU - fullU)));
+    svg.style.opacity = op.toFixed(3);
+    svg.style.display = op > 0 ? '' : 'none';
   }
 
-  // Moves the camera so a box on the plan ([x0, y0, x1, y1] in plan units) fills the view.
-  function fitPlanBox(b, padding, maxZoom) {
-    if (!map) { return; }
+  function boundsOf(b) {
     var bounds = null;
     [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]].forEach(function (p) {
       var ll = toLngLat(p[0], p[1]);
       if (!bounds) { bounds = new maplibregl.LngLatBounds(ll, ll); } else { bounds.extend(ll); }
     });
+    return bounds;
+  }
+  function padFor(padding) {
     var w = map.getContainer().clientWidth, hh = map.getContainer().clientHeight;
-    var pad = Math.min(padding, w / 4, hh / 4);
-    map.fitBounds(bounds, { padding: pad, maxZoom: maxZoom || 20.5, duration: REDUCED ? 0 : 700 });
+    return Math.min(padding, w / 4, hh / 4);
+  }
+  // Moves the camera so a box on the plan ([x0, y0, x1, y1] in plan units) fills the view.
+  function fitPlanBox(b, padding, maxZoom) {
+    if (!map) { return; }
+    map.fitBounds(boundsOf(b), { padding: padFor(padding), maxZoom: maxZoom || 20.5, duration: REDUCED ? 0 : 700 });
+  }
+  // Works out U_FIT for this screen size (see INSIDE above). Called at start and when the window resizes.
+  function measureFit() {
+    var cam = map.cameraForBounds(boundsOf(planBox()), { padding: padFor(40) });
+    if (cam && u) { U_FIT = u * Math.pow(2, map.getZoom() - cam.zoom); }
+    return cam;
   }
   function planBox() {
     var pts = [];
@@ -879,7 +904,9 @@ dd.none{color:var(--muted)}
       if (!b) { b = [x0, y0, x1, y1]; return; }
       b[0] = Math.min(b[0], x0); b[1] = Math.min(b[1], y0); b[2] = Math.max(b[2], x1); b[3] = Math.max(b[3], y1);
     }
-    if (sel && lv(sel.o) === curLevel) {
+    if (sel && sel.kind === 'building') {
+      bldgRings(sel.o).forEach(function (r) { r.forEach(function (c) { var q = toPlan(c[0], c[1]); grow(q.x, q.y, q.x, q.y); }); });
+    } else if (sel && lv(sel.o) === curLevel) {
       var o = sel.o;
       if (sel.kind === 'room') { grow(o._box.x, o._box.y, o._box.x + o._box.w, o._box.y + o._box.h); } else { grow(o.x - 50, o.y - 50, o.x + 50, o.y + 50); }
     }
@@ -894,6 +921,7 @@ dd.none{color:var(--muted)}
     var minSize = 1000;
     if (b[2] - b[0] < minSize) { var cx = (b[0] + b[2]) / 2; b[0] = cx - minSize / 2; b[2] = cx + minSize / 2; }
     if (b[3] - b[1] < minSize) { var cy = (b[1] + b[3]) / 2; b[1] = cy - minSize / 2; b[3] = cy + minSize / 2; }
+    highlightBuilding();
     fitPlanBox(b, pad);
   }
 
@@ -922,7 +950,7 @@ dd.none{color:var(--muted)}
     var bm = BASEMAPS[CAMPUS.basemap] || BASEMAPS['osm-dev'];
     map = new maplibregl.Map({
       container: 'world',
-      center: toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2), zoom: 17.6, maxZoom: 22, maxPitch: 0,
+      center: toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2), zoom: 17.2, maxZoom: 22, maxPitch: 0,
       attributionControl: false, dragRotate: false, pitchWithRotate: false, touchPitch: false,
       style: { version: 8, sources: { base: { type: 'raster', tiles: bm.tiles, tileSize: 256, maxzoom: bm.maxzoom, attribution: bm.attribution } },
         layers: [{ id: 'base', type: 'raster', source: 'base' }] }
@@ -933,8 +961,12 @@ dd.none{color:var(--muted)}
     map.getCanvasContainer().appendChild(svg); // the floor plan moves with the map
     window.mapbcMap = map; // handy for testing and for poking at the map from the browser console
     map.on('move', applyView);
-    map.on('resize', applyView);
+    map.on('resize', function () { applyView(); measureFit(); applyView(); });
     map.on('click', onMapClick);
+    applyView();
+    // Open on the building with campus around it: a little further out than "the building fits".
+    var cam = measureFit();
+    if (cam) { map.jumpTo({ center: cam.center, zoom: cam.zoom - START_ZOOM_OUT }); }
     applyView();
   }
 
@@ -945,15 +977,19 @@ dd.none{color:var(--muted)}
     map.addSource('route-out', { type: 'geojson', data: EMPTY });
     map.addSource('you-acc', { type: 'geojson', data: EMPTY });
 
-    map.addLayer({ id: 'buildings', type: 'fill', source: 'buildings', paint: { 'fill-color': '#6b7a90', 'fill-opacity': 0.18 } });
-    map.addLayer({ id: 'buildings-line', type: 'line', source: 'buildings', paint: { 'line-color': '#5b6678', 'line-width': 1 } });
+    // Campus buildings are already drawn by the base map. This layer is nearly invisible: it is there so
+    // a tap can tell which building you tapped, and to outline the one you picked. Stokes uses its own shape.
+    var notStokes = ['!', ['in', 'Stokes Hall', ['coalesce', ['get', 'name'], '']]];
+    map.addLayer({ id: 'buildings', type: 'fill', source: 'buildings', filter: notStokes, paint: { 'fill-color': '#0a6cff', 'fill-opacity': 0.01 } });
+    map.addLayer({ id: 'building-sel', type: 'line', source: 'buildings', filter: ['==', ['get', 'osm'], ''], paint: { 'line-color': '#0a6cff', 'line-width': 3 } });
     // Walking paths. Steps are dashed red so you can see where a route is not step-free.
-    map.addLayer({ id: 'paths', type: 'line', source: 'paths', filter: ['!=', ['get', 'highway'], 'steps'],
+    map.addLayer({ id: 'paths', type: 'line', source: 'paths', filter: ['!=', ['get', 'highway'], 'steps'], layout: { visibility: 'none' },
       paint: { 'line-color': '#2b6cb0', 'line-opacity': 0.45, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1, 20, 4] } });
-    map.addLayer({ id: 'paths-steps', type: 'line', source: 'paths', filter: ['==', ['get', 'highway'], 'steps'],
+    map.addLayer({ id: 'paths-steps', type: 'line', source: 'paths', filter: ['==', ['get', 'highway'], 'steps'], layout: { visibility: 'none' },
       paint: { 'line-color': '#c0392b', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 20, 5], 'line-dasharray': [1, 1] } });
-    map.addLayer({ id: 'foot', type: 'fill', source: 'foot', maxzoom: OVERLAY_MIN_ZOOM, paint: { 'fill-color': '#8c1d2f', 'fill-opacity': 0.55 } });
-    map.addLayer({ id: 'foot-line', type: 'line', source: 'foot', maxzoom: OVERLAY_MIN_ZOOM, paint: { 'line-color': '#8c1d2f', 'line-width': 1.5 } });
+    // Stokes from outside: a soft maroon tint and outline that say "this one has an indoor map". The inside covers it when zoomed in.
+    map.addLayer({ id: 'foot', type: 'fill', source: 'foot', paint: { 'fill-color': '#8c1d2f', 'fill-opacity': 0.28 } });
+    map.addLayer({ id: 'foot-line', type: 'line', source: 'foot', paint: { 'line-color': '#8c1d2f', 'line-width': 2, 'line-opacity': 0.8 } });
     map.addLayer({ id: 'you-acc', type: 'fill', source: 'you-acc', paint: { 'fill-color': '#0a6cff', 'fill-opacity': 0.12 } });
     map.addLayer({ id: 'you-acc-line', type: 'line', source: 'you-acc', paint: { 'line-color': '#0a6cff', 'line-opacity': 0.4, 'line-width': 1 } });
     // The outdoor part of a route: solid along walkways, dashed when it is only a straight line.
@@ -964,7 +1000,7 @@ dd.none{color:var(--muted)}
     map.addLayer({ id: 'route-out-straight', type: 'line', source: 'route-out', filter: ['get', 'straight'], layout: { 'line-cap': 'round' },
       paint: { 'line-color': '#0a6cff', 'line-width': 4, 'line-dasharray': [1.5, 1.5] } });
 
-    map.on('click', 'foot', function () { showAll(); });
+    map.on('click', 'foot', function () { if (svg.style.display === 'none') { showAll(); } });
     map.on('mouseenter', 'foot', function () { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'foot', function () { map.getCanvas().style.cursor = ''; });
     mapTheme();
@@ -978,6 +1014,11 @@ dd.none{color:var(--muted)}
     map.setPaintProperty('base', 'raster-brightness-max', dark ? 0.12 : 1);
     map.setPaintProperty('base', 'raster-saturation', dark ? -0.55 : 0);
     map.setPaintProperty('base', 'raster-hue-rotate', dark ? 180 : 0);
+  }
+
+  function highlightBuilding() {
+    if (!map || !map.getLayer('building-sel')) { return; }
+    map.setFilter('building-sel', ['==', ['get', 'osm'], sel && sel.kind === 'building' ? sel.o.properties.osm : '']);
   }
 
   function drawOutRoute() {
@@ -998,7 +1039,13 @@ dd.none{color:var(--muted)}
     }
     var t = document.elementFromPoint(r.left + e.point.x, r.top + e.point.y);
     var m = t && svg.contains(t) ? pick(t) : null;
-    if (m) { act(m); }
+    if (m) { act(m); return; }
+    // Not on the floor plan: did the tap land on a named campus building?
+    var hit = map.getLayer('buildings') ? map.queryRenderedFeatures(e.point, { layers: ['buildings'] }) : [];
+    for (var i = 0; i < hit.length; i++) {
+      var f = buildingByOsm(hit[i].properties.osm);
+      if (f) { choose({ kind: 'building', o: f }); return; }
+    }
   }
 
   // ---------- Floors ----------
@@ -1084,7 +1131,7 @@ dd.none{color:var(--muted)}
     if (!outNet) {
       var c = toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2);
       outFrame = ML.localFrame(c[1], c[0]);
-      outNet = ML.outdoorNetwork(CDATA.paths, outFrame);
+      outNet = ML.outdoorNetwork(CDATA.paths, outFrame, CDATA.buildings);
     }
     return outNet;
   }
@@ -1133,6 +1180,122 @@ dd.none{color:var(--muted)}
       steps: best.straight ? null : ML.describe(best.out, best.outdoor, en.name, { feetPerUnit: 3.28084, fallbackName: 'the path' }).steps
     };
     lastRouteFix = { x: you.x, y: you.y };
+  }
+
+  // ---------- Campus buildings: search them and walk to them ----------
+  // Named buildings from campus/data.js (OpenStreetMap). Stokes itself has its own indoor map instead.
+  var BLDGS = ((CDATA.buildings || {}).features || []).filter(function (f) { return f.properties && f.properties.name; });
+  function isStokes(name) { return /stokes hall/i.test(name || ''); }
+  function bldgRings(f) { var g = f.geometry; return g.type === 'Polygon' ? [g.coordinates[0]] : g.coordinates.map(function (p) { return p[0]; }); }
+  function bldgCenter(f) {
+    var r = bldgRings(f)[0], x = 0, y = 0;
+    r.forEach(function (c) { x += c[0] / r.length; y += c[1] / r.length; });
+    return [x, y];
+  }
+  function bldgKind(f) {
+    var k = f.properties.kind;
+    return { dormitory: 'Residence hall', university: 'Campus building', dining_hall: 'Dining hall', school: 'School' }[k] || 'Building';
+  }
+  function searchBuildings(q) {
+    var toks = String(q || '').toLowerCase().split(/\s+/).map(function (t) { return t.replace(/s$/, ''); }).filter(Boolean);
+    if (!toks.length) { return []; }
+    return BLDGS.filter(function (f) {
+      var n = f.properties.name.toLowerCase();
+      return toks.every(function (t) { return n.indexOf(t) > -1; });
+    }).slice(0, 8).map(function (f) { return { kind: 'building', o: f }; });
+  }
+  function buildingByOsm(id) { for (var i = 0; i < BLDGS.length; i++) { if (BLDGS[i].properties.osm === id) { return BLDGS[i]; } } return null; }
+
+  // Distance in metres from a [lng, lat] point to a building outline (0 if inside).
+  function metersToRing(c, ring) {
+    var p = outFrame.toXY(c[1], c[0]), inside = false, best = Infinity;
+    var r = ring.map(function (q) { return outFrame.toXY(q[1], q[0]); });
+    for (var i = 0, j = r.length - 1; i < r.length; j = i++) {
+      var a = r[i], b = r[j];
+      if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) { inside = !inside; }
+      var dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy || 1;
+      var t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+      best = Math.min(best, Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy));
+    }
+    return inside ? 0 : best;
+  }
+
+  // Where an outdoor walk starts: your location, or the chosen Stokes door.
+  function startPoint() {
+    if (from === 'ME') { return you ? toLngLat(you.x, you.y) : null; }
+    var en = entranceById(from);
+    return en && lv(en) === LEVELS[0].id ? toLngLat(en.x, en.y) : null;
+  }
+
+  // Walking directions to a campus building: along the walkways to its nearest mapped entrance,
+  // or to the middle of the building when OpenStreetMap has no entrances for it.
+  function routeToBuilding(f) {
+    var s = startPoint();
+    if (!s) { return; }
+    var net = outdoorNet(), st = outFrame.toXY(s[1], s[0]), rings = bldgRings(f), doors = [];
+    ((CDATA.entrances || {}).features || []).forEach(function (e, i) {
+      var c = e.geometry.coordinates;
+      if (rings.some(function (r) { return metersToRing(c, r) < 8; })) { doors.push({ id: 'B' + i, ll: c }); }
+    });
+    if (!doors.length) { doors.push({ id: 'B', ll: bldgCenter(f) }); }
+    var startName = from === 'ME' ? 'Your location' : entranceById(from).name;
+    var pts = [{ id: 'START', name: startName, x: st.x, y: st.y }].concat(doors.map(function (d) {
+      var p = outFrame.toXY(d.ll[1], d.ll[0]);
+      return { id: d.id, name: f.properties.name, x: p.x, y: p.y };
+    }));
+    var out = net.edges.length ? ML.buildGraph(net, [], pts, []) : null;
+    var r = out ? ML.shortest(out, 'entrance:START', doors.map(function (d) { return 'entrance:' + d.id; }), { accessible: accessible }) : null;
+    var straight = !r;
+    if (straight) { var p1 = pts[1]; r = { points: [[st.x, st.y], [p1.x, p1.y]], length: Math.hypot(st.x - p1.x, st.y - p1.y), ids: [], kinds: [] }; }
+    outRoute = {
+      straight: straight, toBuilding: true,
+      feet: Math.round(r.length * 3.28084 / 5) * 5,
+      lnglat: r.points.map(function (p) { var g = outFrame.toLatLng(p[0], p[1]); return [g.lng, g.lat]; }),
+      steps: straight ? null : ML.describe(out, r, f.properties.name, { feetPerUnit: 3.28084, fallbackName: 'the path' }).steps
+    };
+  }
+
+  function renderBuildingCard(box) {
+    var name = sel.o.properties.name;
+    if (!from) {
+      box.appendChild(h('h2', { text: 'Walk to ' + name }));
+      box.appendChild(h('p', { 'class': 'fine', text: 'Choose where you start (My location, or a Stokes door) to get walking directions.' }));
+      return;
+    }
+    if (from === 'ME' && !you) {
+      box.appendChild(h('h2', { text: 'Finding your location' }));
+      box.appendChild(h('p', { 'class': 'fine', text: SIM ? 'Test mode: tap the map to place a pretend location.' : 'Allow location when the browser asks. It is quicker outside.' }));
+      return;
+    }
+    if (!outRoute) {
+      box.appendChild(h('h2', { text: 'No route found' }));
+      box.appendChild(h('div', { 'class': 'callout', text: 'Start from My location or a ground-floor Stokes door to walk to another building.' }));
+      return;
+    }
+    var mins = Math.max(1, Math.round(outRoute.feet / 240));
+    box.appendChild(h('div', { 'class': 'sum' }, [
+      h('div', { 'class': 'big' }, [String(mins), h('small', { text: 'min walk' })]),
+      h('div', { 'class': 'dist', text: '≈ ' + (outRoute.feet >= 1000 ? (outRoute.feet / 5280).toFixed(1) + ' mi' : outRoute.feet + ' ft') })
+    ]));
+    var badges = h('div', { 'class': 'badges' });
+    if (accessible) { badges.appendChild(h('span', { 'class': 'badge ok', text: 'Step-free' })); }
+    if (outRoute.straight) { badges.appendChild(h('span', { 'class': 'badge warn', text: 'Straight line' })); }
+    box.appendChild(badges);
+    var ol = h('ol', { 'class': 'steps' });
+    function addStep(kind, ic, text, feet) {
+      ol.appendChild(h('li', { 'class': 'step ' + kind }, [icon(ic), h('span', { 'class': 'txt', text: text }), h('span', { 'class': 'ft', text: feet ? feet + ' ft' : '' })]));
+    }
+    if (outRoute.straight) {
+      addStep('start', 'start', 'Start at ' + (from === 'ME' ? 'your location' : entranceById(from).name), 0);
+      addStep('arrive', 'arrive', 'Walk to ' + name + ' (straight-line distance)', outRoute.feet);
+    } else {
+      outRoute.steps.forEach(function (s) {
+        var ic = s.kind === 'start' ? 'start' : (s.kind === 'arrive' ? 'arrive' : (s.turn || 'straight'));
+        addStep(s.kind, ic, s.kind === 'start' && from === 'ME' ? 'Start at your location' : s.text, s.feet);
+      });
+    }
+    box.appendChild(ol);
+    box.appendChild(h('p', { 'class': 'fine', text: 'Walkways come from OpenStreetMap. Entrances are often missing there, so the route may end at the nearest walkway to the building.' }));
   }
 
   function setLocBtn() { $('locate').setAttribute('aria-pressed', locOn ? 'true' : 'false'); }
@@ -1239,7 +1402,7 @@ dd.none{color:var(--muted)}
   }
 
   // ---------- Search ----------
-  function search(q) { return ML.search(q, ROOMS, SPOTS); }
+  function search(q) { return ML.search(q, ROOMS, SPOTS).concat(searchBuildings(q)); }
 
   function renderResults() {
     var box = $('results');
@@ -1254,10 +1417,11 @@ dd.none{color:var(--muted)}
     shown = res.slice(0, 6);
     shown.forEach(function (m, i) {
       var sw = m.kind === 'room' ? swatch(m.o.type) : h('span', { 'class': 'sw' });
-      if (m.kind !== 'room') { sw.style.background = 'var(--accent-soft)'; }
+      if (m.kind === 'spot') { sw.style.background = 'var(--accent-soft)'; }
+      if (m.kind === 'building') { sw.style.background = isStokes(m.o.properties.name) ? 'var(--accent)' : 'var(--surface2)'; }
       var b = h('button', { 'class': 'res' + (i === active ? ' active' : ''), type: 'button', role: 'option' }, [
         sw,
-        h('span', { 'class': 't' }, [h('b', { text: titleOf(m) }), h('small', { text: (lv(m.o) !== LEVELS[0].id ? levelName(lv(m.o)) + ' · ' : '') + (m.kind === 'room' ? (TYPES[m.o.type] === 'Stairs, elevators, restrooms' ? 'Building core' : TYPES[m.o.type]) + ' · ' + m.o.wing + (m.o.wing === 'Connector' ? '' : ' wing') : '360 photo point') })]),
+        h('span', { 'class': 't' }, [h('b', { text: titleOf(m) }), h('small', { text: m.kind === 'building' ? (isStokes(m.o.properties.name) ? 'Building · indoor map' : bldgKind(m.o)) : (lv(m.o) !== LEVELS[0].id ? levelName(lv(m.o)) + ' · ' : '') + (m.kind === 'room' ? (TYPES[m.o.type] === 'Stairs, elevators, restrooms' ? 'Building core' : TYPES[m.o.type]) + ' · ' + m.o.wing + (m.o.wing === 'Connector' ? '' : ' wing') : '360 photo point') })]),
         h('kbd', { text: 'Enter' })
       ]);
       b.addEventListener('click', function () { choose(m); });
@@ -1292,6 +1456,7 @@ dd.none{color:var(--muted)}
   function renderRouteCard() {
     var box = $('routecard');
     box.textContent = '';
+    if (sel && sel.kind === 'building') { renderBuildingCard(box); return; }
     if (from === 'ME') { renderYouCard(box); return; }
     var en = entranceById(from);
     if (!en && !sel) {
@@ -1445,6 +1610,16 @@ dd.none{color:var(--muted)}
       return;
     }
     var dl = h('dl');
+    if (sel.kind === 'building') {
+      var bp = sel.o.properties, bsw = h('span', { 'class': 'sw' });
+      bsw.style.background = 'var(--surface2)';
+      box.appendChild(h('div', { 'class': 'dhead' }, [bsw, h('div', {}, [h('h2', { text: bp.name }), h('small', { text: bldgKind(sel.o) })])]));
+      row(dl, 'Floors', bp.levels, 'Not listed');
+      row(dl, 'Indoor map', '', 'Not yet');
+      row(dl, 'Data from', 'OpenStreetMap', '');
+      box.appendChild(dl);
+      return;
+    }
     if (sel.kind === 'room') {
       var r = sel.o;
       box.appendChild(h('div', { 'class': 'dhead' }, [swatch(r.type, 'sw'), h('div', {}, [h('h2', { text: roomTitle(r) }), h('small', { text: (r.type === 'core' ? 'Building core' : TYPES[r.type]) + ' · ' + r.wing + (r.wing === 'Connector' ? '' : ' wing') + ' · ' + levelName(lv(r)) })])]));
@@ -1501,6 +1676,7 @@ dd.none{color:var(--muted)}
   function findRoute() {
     route = null; dirs = null; outRoute = null;
     if (!sel || !from) { return; }
+    if (sel.kind === 'building') { routeToBuilding(sel.o); return; }
     if (from === 'ME') { routeFromYou(); return; }
     route = ML.routeTo(graph, from, sel, { accessible: accessible });
     if (route) { dirs = ML.describe(graph, route, titleOf(sel), { feetPerUnit: SCALE.feetPerUnit, levelNames: LEVEL_NAMES }); }
@@ -1515,12 +1691,19 @@ dd.none{color:var(--muted)}
     } else { drawRoute(); renderBanner(); }
     drawOutRoute();
     renderRouteCard(); renderDetail(); renderPhoto(); renderLoc();
+    applyView(); highlightBuilding();
     refreshStyles(); renderResults();
     saveUrl();
     if (reframe) { frame(); }
   }
 
   function choose(m, quick) {
+    if (m.kind === 'building' && isStokes(m.o.properties.name)) {
+      query = ''; input.value = ''; renderResults(); refreshStyles();
+      fitPlanBox(planBox(), 40, 19.2);
+      input.blur();
+      return;
+    }
     sel = m; query = ''; active = -1; viaQuick = quick || '';
     input.value = titleOf(m);
     update(true);
@@ -1556,7 +1739,7 @@ dd.none{color:var(--muted)}
     if (!window.history || !history.replaceState) { return; }
     var p = [];
     if (from) { p.push('from=' + encodeURIComponent(from)); }
-    if (sel) { p.push((sel.kind === 'room' ? 'room=' : 'spot=') + encodeURIComponent(sel.o.id)); }
+    if (sel) { p.push(sel.kind === 'building' ? 'bldg=' + encodeURIComponent(sel.o.properties.osm) : (sel.kind === 'room' ? 'room=' : 'spot=') + encodeURIComponent(sel.o.id)); }
     if (accessible) { p.push('accessible=1'); }
     try { history.replaceState(null, '', location.pathname + (p.length ? '?' + p.join('&') : '')); } catch (e) { /* some browsers block this on file:// */ }
   }
@@ -1578,6 +1761,11 @@ dd.none{color:var(--muted)}
     $('shownet').addEventListener('change', function () {
       drawNetwork();
       $('netkey').classList.toggle('on', $('shownet').checked);
+      if (map && map.getLayer('paths')) {
+        var vis = $('shownet').checked ? 'visible' : 'none';
+        map.setLayoutProperty('paths', 'visibility', vis);
+        map.setLayoutProperty('paths-steps', 'visibility', vis);
+      }
     });
 
     LEVELS.slice().reverse().forEach(function (L) {
@@ -1670,6 +1858,7 @@ dd.none{color:var(--muted)}
   accessible = start.accessible === '1';
   $('accessible').checked = accessible;
   ROOMS.forEach(function (r) { if (r.id === start.room) { sel = { kind: 'room', o: r }; } });
+  if (start.bldg && buildingByOsm(start.bldg)) { sel = { kind: 'building', o: buildingByOsm(start.bldg) }; }
   SPOTS.forEach(function (s) { if (s.id === start.spot) { sel = { kind: 'spot', o: s }; } });
   if (sel) { input.value = titleOf(sel); }
   showLevel(curLevel);

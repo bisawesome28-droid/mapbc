@@ -34,12 +34,46 @@ function round(coords) {
 
 function osmId(f) { return f.id || (f.properties && (f.properties['@id'] || f.properties.id)) || ''; }
 
+// Is a point [lng, lat] inside a polygon ring? (Counts how many edges a line to the right crosses.)
+function inRing(pt, ring) {
+  var c = false;
+  for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    var a = ring[i], b = ring[j];
+    if ((a[1] > pt[1]) !== (b[1] > pt[1]) && pt[0] < (b[0] - a[0]) * (pt[1] - a[1]) / (b[1] - a[1]) + a[0]) { c = !c; }
+  }
+  return c;
+}
+function outerRings(g) { return g.type === 'Polygon' ? [g.coordinates[0]] : g.coordinates.map(function (p) { return p[0]; }); }
+function middle(g) {
+  var r = outerRings(g)[0], x = 0, y = 0;
+  r.forEach(function (c) { x += c[0] / r.length; y += c[1] / r.length; });
+  return [x, y];
+}
+
 function convert(fc) {
-  var buildings = [], paths = [], entrances = [], skipped = 0;
-  ((fc && fc.features) || []).forEach(function (f) {
+  var buildings = [], paths = [], entrances = [], campus = [], skipped = 0, outside = 0;
+  var all = (fc && fc.features) || [];
+  // The campus boundary (amenity=university or college), when the export has it.
+  all.forEach(function (f) {
+    var g = f.geometry, p = f.properties || {};
+    if (g && (g.type === 'Polygon' || g.type === 'MultiPolygon') && (p.amenity === 'university' || p.amenity === 'college')) {
+      campus.push({ type: 'Feature', properties: { osm: osmId(f), name: p.name || '' }, geometry: { type: g.type, coordinates: round(g.coordinates) } });
+    }
+  });
+  var rings = [];
+  campus.forEach(function (c) { rings = rings.concat(outerRings(c.geometry)); });
+  function onCampus(g) {
+    if (!rings.length) { return true; } // no boundary in the export: keep everything
+    var m = middle(g);
+    return rings.some(function (r) { return inRing(m, r); });
+  }
+  all.forEach(function (f) {
     var g = f.geometry, p = f.properties || {};
     if (!g) { skipped++; return; }
+    if (p.amenity === 'university' || p.amenity === 'college') { return; }
     if ((g.type === 'Polygon' || g.type === 'MultiPolygon') && p.building) {
+      // Houses around campus are left out; named buildings are always kept.
+      if (!p.name && !onCampus(g)) { outside++; return; }
       var props = { osm: osmId(f), name: p.name || p.official_name || '' };
       if (p.building !== 'yes') { props.kind = p.building; }
       if (p['building:levels']) { props.levels = p['building:levels']; }
@@ -63,9 +97,10 @@ function convert(fc) {
   var named = buildings.filter(function (b) { return b.properties.name; }).length;
   return {
     buildings: { type: 'FeatureCollection', features: buildings },
+    campus: { type: 'FeatureCollection', features: campus },
     paths: { type: 'FeatureCollection', features: paths },
     entrances: { type: 'FeatureCollection', features: entrances },
-    report: { buildings: buildings.length, namedBuildings: named, paths: paths.length, entrances: entrances.length, skipped: skipped }
+    report: { buildings: buildings.length, namedBuildings: named, paths: paths.length, entrances: entrances.length, skipped: skipped, outsideCampus: outside, campusAreas: campus.length }
   };
 }
 
@@ -80,7 +115,7 @@ function toDataJs(out) {
     '// Coordinates are [longitude, latitude] (longitude FIRST, the opposite of Google Maps).\n' +
     '// Written by tools/osm_to_campus.js from an OpenStreetMap export (see campus/README.md).\n' +
     '// Data (c) OpenStreetMap contributors, ODbL. Keep the credit on the map.\n' +
-    'window.CAMPUS_DATA = {\n  "buildings": ' + fc(out.buildings) + ',\n  "paths": ' + fc(out.paths) + ',\n  "entrances": ' + fc(out.entrances) + '\n};\n';
+    'window.CAMPUS_DATA = {\n  "campus": ' + fc(out.campus || { features: [] }) + ',\n  "buildings": ' + fc(out.buildings) + ',\n  "paths": ' + fc(out.paths) + ',\n  "entrances": ' + fc(out.entrances) + '\n};\n';
 }
 
 function main(file) {
@@ -95,9 +130,10 @@ function main(file) {
   console.log('Buildings: ' + r.buildings + ' (' + r.namedBuildings + ' with a name, ' + (r.buildings - r.namedBuildings) + ' without)');
   console.log('Walking paths: ' + r.paths);
   console.log('Entrances: ' + r.entrances + (r.entrances < r.buildings ? '  (fewer than buildings: most doors still need adding)' : ''));
+  if (r.campusAreas) { console.log('Campus boundary: ' + r.campusAreas + ' area(s). Left out ' + r.outsideCampus + ' unnamed buildings outside it (houses nearby).'); }
   console.log('Left out: ' + r.skipped + ' other items (roads, trees, and so on)');
   var unnamed = out.buildings.features.filter(function (b) { return !b.properties.name; }).length;
-  if (unnamed) { console.log('\nBuildings with no name will not show a label or turn up in search. Name them in OpenStreetMap or in campus/buildings.geojson.'); }
+  if (unnamed) { console.log('\nBuildings with no name will not show a label or turn up in search. Name them in OpenStreetMap or in campus/data.js.'); }
 }
 
 if (require.main === module) { main(process.argv[2]); }

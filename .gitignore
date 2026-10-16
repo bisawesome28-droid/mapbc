@@ -2,3 +2,6 @@
 reference/
 *brochure*
 *palladio*
+
+# Raw OpenStreetMap download (tools/fetch_osm.py). campus/data.js is made from it and is committed instead.
+campus/osm_export.geojson
