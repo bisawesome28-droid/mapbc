@@ -71,6 +71,12 @@ and plan to pitch schools to supply their own floor plans. Stokes Hall Level 1 i
   is at least as big as the screen: `buildingFill()` in index.html, `SHOW_INSIDE_AT = 1.0`). It fades in over the next 15% so it does not pop.
   The rule is the same with or without a room or route selected, and on a phone or a laptop. The page opens further out than that,
   so you see campus first; the "All" button, picking a room, or tapping the maroon building zooms in far enough to show it.
+- **Residence hall doors and lobbies (`campus/extras.js`):** St. Thomas More Apartments (2 entrances and the lobby) and Cheverus Hall
+  (4 entrances, marked as guesses: which doors students use is not checked; Cheverus's first floor has no lobby). Taken from BC
+  Residential Life's floor plans, which are behind BC's login, so **only doors and lobbies are on the map, no rooms**, and the plan files
+  are not in the repo. Placed by matching each plan's outline to the OpenStreetMap footprint (about 1 to 3 m off at most).
+  They join OpenStreetMap's entrances when the page loads, so directions to those buildings end at a real door. Entrances show as
+  green dots and lobbies as light blue shapes once you zoom in. Ask BC before adding anything more from those plans.
 - **Version label:** the footer of the page says "Map version ..." (`VERSION` in index.html). Bump it whenever you publish a change.
   If someone says "I see no change", ask what version they see: GitHub Pages can take a few minutes, and browsers keep old copies
   (a hard refresh fixes that).
