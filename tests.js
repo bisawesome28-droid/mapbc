@@ -390,7 +390,34 @@ test('real data: every room on Levels 2 to 4 can be reached step-free, by elevat
     D.ENTRANCES.forEach(function (en) {
       var r = ML.routeTo(graph, en.id, { kind: 'room', o: rm }, { accessible: true });
       assert.ok(r, en.id + ' cannot reach ' + rm.id + ' step-free');
-      assert.ok(r.kinds.indexOf('stair') === -1 && r.kinds.indexOf('elevator') > -1, en.id + ' to ' + rm.id + ': ' + r.kinds.join(','));
+      assert.ok(r.kinds.indexOf('stair') === -1, en.id + ' to ' + rm.id + ' uses stairs');
+      // An entrance on the room's own floor (the raised S290 door on Level 2) needs no elevator.
+      if (String(en.level || '1') !== rm.level) { assert.ok(r.kinds.indexOf('elevator') > -1, en.id + ' to ' + rm.id + ': ' + r.kinds.join(',')); }
+    });
+  });
+});
+
+test('real data: S290 is a doorway to outside on Level 2, not a room', function () {
+  assert.ok(!D.ROOMS.some(function (r) { return r.id === 'S290' || r.door === 'S290'; }), 'no room called S290');
+  var en = D.ENTRANCES.filter(function (e) { return e.id === 'E-S-290'; })[0];
+  assert.ok(en && en.level === '2' && en.outdoor, 'Level 2 outdoor entrance exists');
+  var r = ML.routeTo(graph, 'E-S-290', { kind: 'room', o: D.ROOMS.filter(function (x) { return x.id === 'S295'; })[0] }, { accessible: true });
+  assert.ok(r && r.levels.every(function (l) { return l === '2'; }), 'S290 reaches S295 without leaving Level 2');
+  var l1 = D.ROOMS.filter(function (x) { return !x.level || x.level === '1'; })[0];
+  var down = ML.routeTo(graph, 'E-S-290', { kind: 'room', o: l1 }, { accessible: true });
+  assert.ok(down && down.levels.indexOf('1') > -1, 'S290 reaches Level 1 rooms through the elevator');
+});
+
+test('real data: Level 2 and 3 walls and rooms are straight (horizontal or vertical only)', function () {
+  ['2', '3'].forEach(function (lv) {
+    var shapes = D.OUTLINES.filter(function (o) { return String(o.level || '1') === lv; }).map(function (o) { return { id: 'outline ' + o.wing, pts: o.points }; });
+    D.ROOMS.filter(function (r) { return r.level === lv && r.shape && !r.stair && !r.restroom && r.type !== 'core' && r.type !== 'connector'; })
+      .forEach(function (r) { shapes.push({ id: r.id, pts: r.shape }); });
+    shapes.forEach(function (s) {
+      for (var i = 0; i < s.pts.length; i++) {
+        var a = s.pts[i], b = s.pts[(i + 1) % s.pts.length];
+        assert.ok(a[0] === b[0] || a[1] === b[1], 'Level ' + lv + ' ' + s.id + ' has a slanted wall near ' + a + ' to ' + b);
+      }
     });
   });
 });
