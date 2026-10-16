@@ -10,7 +10,15 @@ This folder holds the campus side: settings and the campus data (buildings, walk
 - `osm_export.geojson`: the raw export from step 1 (you add this file; it is only the input).
 - `../tools/osm_to_campus.js`: turns the raw export into `data.js`.
 
-## Step 1: Get the campus data from OpenStreetMap (about 5 minutes)
+## Quick way (if this computer can reach api.openstreetmap.org)
+```
+python3 tools/fetch_osm.py
+node tools/osm_to_campus.js campus/osm_export.geojson
+```
+The first command downloads the Boston College area in small squares (use `--bbox south,west,north,east` for another campus).
+It also keeps the campus boundary, so the import leaves out the houses around campus.
+
+## Step 1 (other way): Get the campus data from OpenStreetMap (about 5 minutes)
 1. Go to https://overpass-turbo.eu
 2. Zoom the map on the right until it shows the whole Chestnut Hill campus (the area you want to map).
 3. Replace the text on the left with this, then click **Run**. `{{bbox}}` means "whatever the map is showing", so no

@@ -2,8 +2,13 @@
 
 ## Read this first: how the map fits together (Oct 16, 2026)
 `index.html` is now **one map**: the outdoor campus map (MapLibre + OpenStreetMap) with the Stokes Hall floor plan laid
-exactly on top of the real building. Zoomed out you see campus and Stokes as a maroon shape; zoom in and the floor plan appears,
-with rooms, doors, floors, search and routes as before. `node tests.js` should say 60 passed, 0 failed.
+exactly on top of the real building. Zoomed out, Stokes looks like any other building (with a soft maroon tint: "has an indoor
+map"); zoom in and the inside fades in, with rooms, doors, floors, search and routes as before. Campus buildings and walkways
+are imported from OpenStreetMap, so routes from your location follow real paths. `node tests.js` should say 64 passed, 0 failed.
+
+**Compass words are real.** The brochure is drawn turned: its right side is real north, its top is real west, its left is real
+south, its bottom is real east. Names in data.js use real directions (the old "West door" is the South end door). "South wing" and
+"North wing" are Stokes South and Stokes North. The "where" notes copied from rooms.csv still describe the brochure picture.
 
 ### Who and why
 Brandon (BC student) and a friend are building a campus map app. The goal: a big outdoor campus map, tap into a building to see its
@@ -32,16 +37,22 @@ and plan to pitch schools to supply their own floor plans. Stokes Hall Level 1 i
   Without internet the base map is blank but the floor plan, search and routes still work.
 
 ### Campus data and outdoor routes
-- `campus/data.js` holds campus buildings, walking paths and entrances (GeoJSON, **[lng, lat]** order). **It is still empty.**
-  It is a .js file (not .geojson) so the page works from disk. `tools/osm_to_campus.js` writes it from an OpenStreetMap export (`campus/README.md`).
+- `campus/data.js` holds the campus boundary, buildings, walking paths and entrances (GeoJSON, **[lng, lat]** order), imported Oct 16, 2026:
+  170 buildings inside BC's campus boundary (121 named; nearby houses left out), 1,107 walkways (33 with steps), 36 entrances.
+  It is a .js file (not .geojson) so the page works from disk.
+- To refresh it: `python3 tools/fetch_osm.py` (downloads the BC area from api.openstreetmap.org in small squares), then
+  `node tools/osm_to_campus.js campus/osm_export.geojson`. The raw export is not committed (.gitignore).
 - "Starting from" has **My location (GPS)**. The route goes outdoors to the best door, then inside (`ML.campusRoute`): it tries every
   ground-floor entrance and keeps the shortest total walk. The step-free option avoids outdoor "steps" paths and paths tagged wheelchair=no.
-- **Until walkways are loaded, the outdoor part is a straight dashed line**, and the page says so. Once `campus/data.js` has paths,
-  the same code follows them with turn-by-turn steps.
+- Outdoor turns are named after the nearest building (within 30 m), because most campus walkways have no name:
+  "Turn left toward Devlin Hall". If the walkways do not connect, the outdoor part falls back to a straight dashed line, labelled.
+- Search also finds campus buildings ("gasson"): it outlines the building and gives walking directions from My location or a
+  Stokes door, to the building's OpenStreetMap entrance if it has one, else to the walkway nearest its middle. Tapping a building works too.
+- The route finder uses a priority queue (fast on thousands of points); a test checks it gives the same answers as the simple method.
 - Inside the building, GPS is too rough, so "My location" starts from the nearest door instead.
-- **Why the data is not loaded yet:** this cloud session cannot reach OpenStreetMap's data servers (overpass-api.de resets the connection,
-  api.openstreetmap.org is not in the allowed domains). Either add `api.openstreetmap.org` to the environment's allowed domains, or run the
-  export in a browser (campus/README.md, step 1) and commit the result.
+- When the inside shows: it depends on how big the building is on screen (U_FIT in index.html), not a fixed zoom level, so a phone
+  and a laptop behave the same. The page opens a bit further out than "building fits the screen", so you see campus first.
+- "Show path network" also shows the campus walkways (steps dashed red).
 
 ### Floor detection (discussed, not built)
 Plan: barometer for relative floor change, reset at entrances that have a known floor (BC buildings can have entrances on different levels,
@@ -64,7 +75,7 @@ Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons nee
 - tests.js: run `node tests.js` to check search and routing. Run it after every data.js edit.
 - rooms.csv: spreadsheet template for real room data (door numbers, landmarks, verified flag).
 - pipeline_prototype/: optional prototype that finds rooms in a color-coded floor plan image.
-- campus/: campus settings (config.js) and campus data (data.js, empty until imported). tools/osm_to_campus.js imports OpenStreetMap data.
+- campus/: campus settings (config.js) and campus data (data.js, from OpenStreetMap). tools/fetch_osm.py downloads it and tools/osm_to_campus.js converts it.
 - tools/fit_plan_to_osm.py: places a traced floor plan on the real map by fitting its outline onto OpenStreetMap's footprint (prints GEO points). Used for Stokes; use it for each new building.
 - vendor/: the MapLibre map library (version 5.24.0, BSD license), stored here so the page needs no CDN.
 - campus.html: just sends old links to index.html.
@@ -121,7 +132,7 @@ feetPerUnit to real feet divided by 1265. Time assumes an easy 240 feet per minu
 1. Each room's door position. Edit that room's "doors" in data.js. Each [x, y] is one door.
 2. The guessed hallways: north hallway behind S01/S02, west link down to the main hallway,
    north entry vestibule, hall by Stair 2, vestibule by Stair 1, north wing east hallway, hall by Stair 4.
-3. Entrances: is the cafe "door" really a door? Is the service entrance public? Where exactly is the north entry?
+3. Entrances: are the North doors (south wing, by the cafe) real doors? Is the service entrance public? Where exactly is the west entry by reception?
 4. Any steps inside the building (for example by Stair 1, where the brochure says "UP", or at the bridge ends).
    Mark them as a short edge with "kind": "steps".
 5. The outdoor walkway between the wings: is it covered? Any steps or a ramp at either end?
@@ -133,7 +144,7 @@ feetPerUnit to real feet divided by 1265. Time assumes an easy 240 feet per minu
 - Turn on "Show path network" to see the result. Then run `node tests.js`. It flags typos and doors too far from any hallway.
 
 ## Next steps
-0. Load the campus walkways (campus/README.md), then walk around outside Stokes with the page on https and check the blue dot and the route in.
+0. Walk around outside Stokes with the page on https (GitHub Pages) and check the blue dot and the route in. Add missing entrances in OpenStreetMap.
 1. Get real room numbers and door positions (the evacuation floor plans in the building should have them).
 2. Walk the building and fix the guesses listed above. Set "guess": false or "verified": true as you go.
 3. Test with ~5 freshmen against BC's map and log hours per building.
