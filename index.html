@@ -10,6 +10,7 @@
   --accent:#7b1e2b;--accent-bg:#f3dde0;--shell:#faf9f6;
   --c-classroom:#ecc3b3;--c-office:#f2de9b;--c-service:#f1be86;--c-it:#d3d0a0;
   --c-common:#cadceb;--c-core:#dedcd4;--c-conf:#ebc6d6;--c-connector:#efede6;
+  --entr:#1f6f43;--entr-fg:#ffffff;--route:#1d5fbf;--guess:#c46a00;--net:#5d6b7a;
 }
 @media (prefers-color-scheme:dark){
   :root{
@@ -17,6 +18,7 @@
     --accent:#e08a97;--accent-bg:#4a2229;--shell:#232321;
     --c-classroom:#6d3a2c;--c-office:#6a5a1e;--c-service:#75481a;--c-it:#55532a;
     --c-common:#2f4a63;--c-core:#44433f;--c-conf:#64334a;--c-connector:#34332f;
+    --entr:#6fcf97;--entr-fg:#10261a;--route:#7fb0ff;--guess:#f0a050;--net:#9aa8b6;
   }
 }
 *{box-sizing:border-box}
@@ -75,6 +77,36 @@ button:hover{border-color:var(--muted)}
 .photo img{max-width:100%;border-radius:8px;display:block;margin-top:8px}
 .progress{color:var(--muted);font-size:13px}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:12px 0 0}
+.controls label{font-size:14px;display:flex;align-items:center;gap:6px}
+.controls select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);max-width:100%}
+.from-row{flex:1 1 100%;flex-wrap:wrap}
+@keyframes pulse{50%{stroke-opacity:.3}}
+.room.sel rect{animation:pulse 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.room.sel rect{animation:none}}
+.entrance{cursor:pointer}
+.entrance rect{fill:var(--entr);stroke:var(--bg);stroke-width:1.5}
+.entrance text{font-size:9px;font-weight:700;fill:var(--entr-fg);pointer-events:none}
+.entrance .elabel{fill:var(--entr);font-size:11px;paint-order:stroke;stroke:var(--bg);stroke-width:3px;visibility:hidden}
+.entrance.on rect{stroke:var(--fg);stroke-width:2.5}
+.entrance.on .elabel,.entrance:hover .elabel,.entrance:focus .elabel{visibility:visible}
+.entrance:focus{outline:none}
+.route-casing{fill:none;stroke:var(--bg);stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+.route-line{fill:none;stroke:var(--route);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.route-end{fill:var(--route);stroke:var(--bg);stroke-width:2}
+.net-edge{stroke:var(--net);stroke-width:2;fill:none}
+.net-edge.guess{stroke:var(--guess);stroke-dasharray:6 4}
+.net-node{fill:var(--net)}
+.net-node.guess{fill:var(--guess)}
+.net-attach{stroke:var(--net);stroke-width:1;stroke-dasharray:2 2}
+.net-door{fill:var(--bg);stroke:var(--net);stroke-width:1.5}
+#layer-net{pointer-events:none}
+#layer-route{pointer-events:none}
+.panel ol{margin:6px 0 0;padding-left:22px;font-size:14px}
+.panel h3{font-size:15px;font-weight:600;margin:14px 0 2px}
+.note{color:var(--muted);font-size:13px;margin:6px 0 0}
+.sw-entr{background:var(--entr);border-color:var(--entr)}
+.sw-route{background:var(--route);border-color:var(--route);height:4px;width:16px;border-radius:2px}
 </style>
 </head>
 <body>
@@ -86,6 +118,14 @@ button:hover{border-color:var(--muted)}
 
   <input id="q" type="search" placeholder="Search a room, door number, or something like restrooms" aria-label="Search the building" autocomplete="off">
   <div id="results" role="list" aria-live="polite"></div>
+
+  <div class="controls">
+    <label class="from-row" for="from">I'm entering from
+      <select id="from"><option value="">Choose an entrance</option></select>
+    </label>
+    <label><input type="checkbox" id="accessible"> Accessible route (no stairs or steps)</label>
+    <label><input type="checkbox" id="shownet"> Show path network</label>
+  </div>
 
   <div id="legend" role="group" aria-label="Filter by type"></div>
 
@@ -104,9 +144,15 @@ button:hover{border-color:var(--muted)}
 </main>
 
 <script src="data.js"></script>
+<script src="logic.js"></script>
 <script>
 (function () {
   var B = window.BUILDING, ROOMS = window.ROOMS, SPOTS = window.SPOTS, SHELLS = window.SHELLS;
+  var ENTRANCES = window.ENTRANCES || [], PATHS = window.PATHS || { nodes: [], edges: [] };
+  var ML = window.MapLogic;
+  var graph = ML.buildGraph(PATHS, ROOMS, ENTRANCES, SPOTS);
+  if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
+  var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -119,7 +165,9 @@ button:hover{border-color:var(--muted)}
   var RATIO = FULL.h / FULL.w;
   var vb = { x: FULL.x, y: FULL.y, w: FULL.w, h: FULL.h };
   var sel = null, hidden = {}, query = '', moved = false;
-  var roomEls = {}, spotEls = {};
+  var roomEls = {}, spotEls = {}, entrEls = {};
+  var from = '', accessible = false, route = null;
+  var layerNet, layerRoute;
 
   document.getElementById('title').textContent = B.name + ', ' + B.level;
   document.getElementById('sub').textContent = B.note;
@@ -150,6 +198,8 @@ button:hover{border-color:var(--muted)}
       el('title', {}, g).textContent = r.name;
       roomEls[r.id] = g;
     });
+    layerNet = el('g', { id: 'layer-net', 'aria-hidden': 'true' }, svg);
+    layerRoute = el('g', { id: 'layer-route', 'aria-hidden': 'true' }, svg);
     SPOTS.forEach(function (s) {
       var g = el('g', { 'class': 'spot', 'data-spot': s.id, tabindex: 0, role: 'button', 'aria-label': s.label + ', photo point' }, svg);
       el('circle', { cx: s.x, cy: s.y, r: 11 }, g);
@@ -158,29 +208,63 @@ button:hover{border-color:var(--muted)}
       el('title', {}, g).textContent = s.label;
       spotEls[s.id] = g;
     });
+    ENTRANCES.forEach(function (en) {
+      var g = el('g', { 'class': 'entrance', 'data-entr': en.id, tabindex: 0, role: 'button', 'aria-label': 'Entrance: ' + en.name }, svg);
+      el('rect', { x: en.x - 11, y: en.y - 7, width: 22, height: 14, rx: 3 }, g);
+      el('text', { x: en.x, y: en.y + 3.2, 'text-anchor': 'middle' }, g).textContent = 'IN';
+      var below = en.y < 400;
+      var anchor = en.x > 900 ? 'end' : (en.x < 100 ? 'start' : 'middle');
+      el('text', { 'class': 'elabel', x: en.x, y: en.y + (below ? 22 : -12), 'text-anchor': anchor }, g).textContent = en.name;
+      el('title', {}, g).textContent = 'Entrance: ' + en.name + (en.guess ? ' (position not checked on site yet)' : '');
+      entrEls[en.id] = g;
+    });
   }
 
-  function hay(o, kind) {
-    if (kind === 'room') {
-      var typeWords = o.type === 'core' ? '' : TYPES[o.type];
-      return (o.id + ' ' + o.door + ' ' + o.name + ' ' + typeWords + ' ' + o.wing + ' ' + (o.keywords || '') + ' ' + (o.near || '')).toLowerCase();
-    }
-    return (o.id + ' ' + o.label + ' ' + (o.keywords || '')).toLowerCase();
-  }
-
-  function search(q) {
-    var toks = q.toLowerCase().split(/\s+/).map(function (t) { return t.replace(/s$/, ''); }).filter(Boolean);
-    if (!toks.length) { return []; }
-    var out = [];
+  // Draws every hallway line, door point and the short links between them.
+  // Orange dashed lines and dots are guesses to check on site.
+  function drawNetwork() {
+    var nodeById = {};
+    PATHS.nodes.forEach(function (n) { nodeById[n.id] = n; });
+    graph.attach.forEach(function (a) {
+      el('line', { 'class': 'net-attach', x1: a.from.x, y1: a.from.y, x2: a.to.x, y2: a.to.y }, layerNet);
+    });
+    PATHS.edges.forEach(function (e) {
+      var a = nodeById[e.from], b = nodeById[e.to];
+      if (!a || !b) { return; }
+      el('line', { 'class': 'net-edge' + (e.guess ? ' guess' : ''), x1: a.x, y1: a.y, x2: b.x, y2: b.y }, layerNet);
+    });
+    PATHS.nodes.forEach(function (n) {
+      var c = el('circle', { 'class': 'net-node' + (n.guess ? ' guess' : ''), cx: n.x, cy: n.y, r: 3 }, layerNet);
+      el('title', {}, c).textContent = n.id + ': ' + (n.name || '');
+    });
     ROOMS.forEach(function (r) {
-      var h = hay(r, 'room');
-      if (toks.every(function (t) { return h.indexOf(t) > -1; })) { out.push({ kind: 'room', o: r }); }
+      (r.doors || []).forEach(function (d) {
+        el('circle', { 'class': 'net-door', cx: d[0], cy: d[1], r: 2.5 }, layerNet);
+      });
     });
-    SPOTS.forEach(function (s) {
-      var h = hay(s, 'spot');
-      if (toks.every(function (t) { return h.indexOf(t) > -1; })) { out.push({ kind: 'spot', o: s }); }
-    });
-    return out;
+  }
+
+  function search(q) { return ML.search(q, ROOMS, SPOTS); }
+
+  function findRoute() {
+    route = null;
+    if (!sel || !from) { return; }
+    route = ML.routeTo(graph, from, sel, { accessible: accessible });
+  }
+
+  function drawRoute() {
+    layerRoute.textContent = '';
+    if (!route) { return; }
+    var pts = route.points.map(function (p) { return p[0] + ',' + p[1]; }).join(' ');
+    el('polyline', { 'class': 'route-casing', points: pts }, layerRoute);
+    el('polyline', { 'class': 'route-line', points: pts }, layerRoute);
+    var end = route.points[route.points.length - 1];
+    el('circle', { 'class': 'route-end', cx: end[0], cy: end[1], r: 6 }, layerRoute);
+  }
+
+  function entranceById(id) {
+    for (var i = 0; i < ENTRANCES.length; i++) { if (ENTRANCES[i].id === id) { return ENTRANCES[i]; } }
+    return null;
   }
 
   function refresh() {
@@ -197,6 +281,9 @@ button:hover{border-color:var(--muted)}
     });
     SPOTS.forEach(function (s) {
       spotEls[s.id].classList.toggle('sel', !!sel && sel.kind === 'spot' && sel.o.id === s.id);
+    });
+    ENTRANCES.forEach(function (en) {
+      entrEls[en.id].classList.toggle('on', en.id === from);
     });
     renderResults(res);
   }
@@ -286,6 +373,42 @@ button:hover{border-color:var(--muted)}
       dl.appendChild(dt2); dl.appendChild(dd2);
     }
     box.appendChild(dl);
+    renderRouteText(box);
+  }
+
+  function note(box, text) {
+    var p = document.createElement('p');
+    p.className = 'note';
+    p.textContent = text;
+    box.appendChild(p);
+  }
+
+  function renderRouteText(box) {
+    var h = document.createElement('h3');
+    h.textContent = 'How to get there';
+    box.appendChild(h);
+    var en = entranceById(from);
+    if (!en) { note(box, 'Choose where you are entering from (above the map) to see a route.'); return; }
+    if (!route) {
+      note(box, accessible
+        ? 'No step-free route from ' + en.name + ' in the map data. Try another entrance.'
+        : 'No route found from ' + en.name + '. The path network may be missing a hallway here.');
+      return;
+    }
+    var ol = document.createElement('ol');
+    route.names.forEach(function (n) {
+      var li = document.createElement('li');
+      li.textContent = n;
+      ol.appendChild(li);
+    });
+    box.appendChild(ol);
+    if (accessible) {
+      note(box, STEP_EDGES
+        ? 'Step-free: this route avoids every stair and step marked in the data.'
+        : 'Step-free mode is on, but no steps are marked on this floor yet, so this is the same as the normal route.');
+    }
+    note(box, 'Door positions and some hallways are traced from a brochure and not checked on site yet' +
+      (route.usesGuess ? ', including parts of this route (orange dashes under "Show path network").' : '.'));
   }
 
   function renderPhoto() {
@@ -337,11 +460,86 @@ button:hover{border-color:var(--muted)}
     clampVB(); setVB();
   }
 
+  // Zooms so the whole box (plus some margin) fits on screen.
+  function fitBox(x0, y0, x1, y1) {
+    var pad = 40;
+    var w = x1 - x0 + pad * 2, h = y1 - y0 + pad * 2;
+    vb.w = Math.min(FULL.w, Math.max(240, w, h / RATIO));
+    vb.h = vb.w * RATIO;
+    vb.x = (x0 + x1) / 2 - vb.w / 2;
+    vb.y = (y0 + y1) / 2 - vb.h / 2;
+    clampVB(); setVB();
+  }
+
+  function frame() {
+    if (!sel) { return; }
+    var o = sel.o;
+    var box = sel.kind === 'room' ? [o.x, o.y, o.x + o.w, o.y + o.h] : [o.x - 20, o.y - 20, o.x + 20, o.y + 20];
+    if (!route) { fitTo(box[0], box[1], box[2] - box[0], box[3] - box[1]); return; }
+    route.points.forEach(function (p) {
+      box[0] = Math.min(box[0], p[0]); box[1] = Math.min(box[1], p[1]);
+      box[2] = Math.max(box[2], p[0]); box[3] = Math.max(box[3], p[1]);
+    });
+    fitBox(box[0], box[1], box[2], box[3]);
+  }
+
+  // Call after the room, entrance or accessible setting changes.
+  function update(reframe) {
+    findRoute();
+    drawRoute();
+    if (reframe) { frame(); }
+    refresh(); renderDetail(); renderPhoto();
+    saveUrl();
+  }
+
   function choose(m) {
     sel = m;
-    if (m.kind === 'room') { fitTo(m.o.x, m.o.y, m.o.w, m.o.h); }
-    else { fitTo(m.o.x - 20, m.o.y - 20, 40, 40); }
-    refresh(); renderDetail(); renderPhoto();
+    update(true);
+  }
+
+  function setFrom(id) {
+    from = entranceById(id) ? id : '';
+    document.getElementById('from').value = from;
+    try { localStorage.setItem('stokes-from', from); } catch (e) { /* storage blocked: fine */ }
+    update(true);
+  }
+
+  // Keeps the address bar in step, so a link like index.html?from=E-S-WEST&room=S03 opens a route.
+  // Handy for QR codes at each entrance.
+  function saveUrl() {
+    if (!window.history || !history.replaceState) { return; }
+    var p = [];
+    if (from) { p.push('from=' + encodeURIComponent(from)); }
+    if (sel) { p.push((sel.kind === 'room' ? 'room=' : 'spot=') + encodeURIComponent(sel.o.id)); }
+    if (accessible) { p.push('accessible=1'); }
+    try { history.replaceState(null, '', location.pathname + (p.length ? '?' + p.join('&') : '')); } catch (e) { /* file:// in some browsers */ }
+  }
+
+  function readUrl() {
+    var p = {};
+    location.search.replace(/^\?/, '').split('&').forEach(function (kv) {
+      var i = kv.indexOf('=');
+      if (i > 0) { p[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); }
+    });
+    return p;
+  }
+
+  function buildFromPicker() {
+    var s = document.getElementById('from');
+    ENTRANCES.forEach(function (en) {
+      var o = document.createElement('option');
+      o.value = en.id;
+      o.textContent = en.name;
+      s.appendChild(o);
+    });
+    s.addEventListener('change', function () { setFrom(s.value); });
+    var a = document.getElementById('accessible');
+    a.addEventListener('change', function () { accessible = a.checked; update(true); });
+    var n = document.getElementById('shownet');
+    n.addEventListener('change', function () {
+      layerNet.textContent = '';
+      if (n.checked) { drawNetwork(); }
+    });
   }
 
   function buildLegend() {
@@ -366,6 +564,16 @@ button:hover{border-color:var(--muted)}
     sp.textContent = '360 = photo point';
     sp.style.alignSelf = 'center';
     box.appendChild(sp);
+    [['sw sw-entr', 'IN = entrance'], ['sw sw-route', 'Route']].forEach(function (k) {
+      var b = document.createElement('span');
+      b.className = 'badge';
+      b.style.display = 'inline-flex'; b.style.alignItems = 'center'; b.style.gap = '6px';
+      var s = document.createElement('span');
+      s.className = k[0];
+      b.appendChild(s);
+      b.appendChild(document.createTextNode(k[1]));
+      box.appendChild(b);
+    });
   }
 
   function buildProgress() {
@@ -403,8 +611,9 @@ button:hover{border-color:var(--muted)}
   }, { passive: false });
 
   function pick(target) {
-    var g = target.closest ? target.closest('[data-id],[data-spot]') : null;
+    var g = target.closest ? target.closest('[data-id],[data-spot],[data-entr]') : null;
     if (!g) { return null; }
+    if (g.getAttribute('data-entr')) { return { kind: 'entrance', id: g.getAttribute('data-entr') }; }
     if (g.getAttribute('data-id')) {
       var id = g.getAttribute('data-id');
       for (var i = 0; i < ROOMS.length; i++) { if (ROOMS[i].id === id) { return { kind: 'room', o: ROOMS[i] }; } }
@@ -417,14 +626,18 @@ button:hover{border-color:var(--muted)}
   svg.addEventListener('click', function (e) {
     if (moved) { moved = false; return; }
     var m = pick(e.target);
-    if (m) { choose(m); }
+    if (m) { act(m); }
   });
   svg.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' || e.key === ' ') {
       var m = pick(e.target);
-      if (m) { e.preventDefault(); choose(m); }
+      if (m) { e.preventDefault(); act(m); }
     }
   });
+  // Tapping an IN marker picks that entrance. Tapping a room or photo point selects it.
+  function act(m) {
+    if (m.kind === 'entrance') { setFrom(m.id); } else { choose(m); }
+  }
 
   document.getElementById('zin').addEventListener('click', function () { zoom(0.7); });
   document.getElementById('zout').addEventListener('click', function () { zoom(1.4); });
@@ -443,11 +656,21 @@ button:hover{border-color:var(--muted)}
 
   draw();
   buildLegend();
+  buildFromPicker();
   buildProgress();
   setVB();
-  refresh();
-  renderDetail();
-  renderPhoto();
+
+  // Start-up: a link like ?from=E-S-WEST&room=S03 wins, otherwise the last entrance used.
+  var start = readUrl();
+  var saved = '';
+  try { saved = localStorage.getItem('stokes-from') || ''; } catch (e) { /* storage blocked: fine */ }
+  from = entranceById(start.from) ? start.from : (entranceById(saved) ? saved : '');
+  document.getElementById('from').value = from;
+  accessible = start.accessible === '1';
+  document.getElementById('accessible').checked = accessible;
+  ROOMS.forEach(function (r) { if (r.id === start.room) { sel = { kind: 'room', o: r }; } });
+  SPOTS.forEach(function (s) { if (s.id === start.spot) { sel = { kind: 'spot', o: s }; } });
+  update(!!sel);
 })();
 </script>
 </body>
