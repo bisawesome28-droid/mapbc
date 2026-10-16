@@ -409,7 +409,7 @@ test('campus import: sorts a mixed OpenStreetMap export into buildings, paths an
   assert.strictEqual(out.paths.features[1].properties.step_count, '12');
 });
 
-test('campus import: with a campus boundary, unnamed buildings outside it are left out', function () {
+test('campus import: with a campus boundary, buildings outside it are left out of directions', function () {
   var sq = function (x, y) { return [[[x, y], [x + 0.0002, y], [x + 0.0002, y + 0.0002], [x, y + 0.0002], [x, y]]]; };
   var out = OSM.convert({ features: [
     { id: 'way/9', properties: { amenity: 'university', name: 'Test U' }, geometry: { type: 'Polygon', coordinates: [[[-71.18, 42.33], [-71.16, 42.33], [-71.16, 42.34], [-71.18, 42.34], [-71.18, 42.33]]] } },
@@ -418,8 +418,33 @@ test('campus import: with a campus boundary, unnamed buildings outside it are le
     { id: 'way/3', properties: { building: 'yes', name: 'Named Hall' }, geometry: { type: 'Polygon', coordinates: sq(-71.15, 42.336) } }
   ] });
   assert.strictEqual(out.report.campusAreas, 1);
-  assert.strictEqual(out.report.outsideCampus, 1, 'the house outside campus is left out');
-  assert.deepStrictEqual(out.buildings.features.map(function (f) { return f.properties.osm; }).sort(), ['way/1', 'way/3']);
+  assert.strictEqual(out.report.outsideCampus, 2, 'the house and the named building outside campus are left out');
+  assert.deepStrictEqual(out.buildings.features.map(function (f) { return f.properties.osm; }), ['way/1']);
+});
+
+test('campus look: areas, roads, trees and nearby houses are sorted out for drawing, with building heights', function () {
+  var sq = function (x, y) { return [[[x, y], [x + 0.0002, y], [x + 0.0002, y + 0.0002], [x, y + 0.0002], [x, y]]]; };
+  var base = OSM.convertBase({ features: [
+    { id: 'way/1', properties: { building: 'university', 'building:levels': '4' }, geometry: { type: 'Polygon', coordinates: sq(-71.17, 42.335) } },
+    { id: 'way/2', properties: { building: 'house' }, geometry: { type: 'Polygon', coordinates: sq(-71.15, 42.335) } },
+    { id: 'way/3', properties: { building: 'yes', height: '22.5' }, geometry: { type: 'Polygon', coordinates: sq(-71.16, 42.335) } },
+    { id: 'way/4', properties: { leisure: 'park', name: 'Test Quad' }, geometry: { type: 'Polygon', coordinates: sq(-71.17, 42.336) } },
+    { id: 'way/5', properties: { amenity: 'parking' }, geometry: { type: 'Polygon', coordinates: sq(-71.17, 42.337) } },
+    { id: 'way/6', properties: { landuse: 'religious' }, geometry: { type: 'Polygon', coordinates: sq(-71.17, 42.338) } },
+    { id: 'way/7', properties: { highway: 'primary', name: 'Beacon Street' }, geometry: { type: 'LineString', coordinates: [[-71.18, 42.33], [-71.17, 42.33]] } },
+    { id: 'way/8', properties: { highway: 'footway', name: 'Some walk' }, geometry: { type: 'LineString', coordinates: [[-71.18, 42.331], [-71.17, 42.331]] } },
+    { id: 'way/9', properties: { railway: 'light_rail' }, geometry: { type: 'LineString', coordinates: [[-71.18, 42.332], [-71.17, 42.332]] } },
+    { id: 'node/1', properties: { natural: 'tree' }, geometry: { type: 'Point', coordinates: [-71.171234567, 42.3351] } }
+  ] }, { 'way/1': 1, 'way/3': 1 });
+  assert.deepStrictEqual(base.heights['way/1'], { h: 16 }, '4 floors x 3.5 m + 1.5 m');
+  assert.deepStrictEqual(base.heights['way/3'], { h: 22.5 }, 'a height tag wins');
+  assert.strictEqual(base.houses.features.length, 1, 'the house is drawn from base.js, not from the campus buildings');
+  assert.deepStrictEqual(base.houses.features[0].properties, { h: 8, guess: 1 }, 'a house with no height gets a guessed one');
+  assert.deepStrictEqual(base.areas.features.map(function (f) { return f.properties['class']; }), ['grass', 'parking'], 'grass under parking; unknown kinds left out');
+  assert.strictEqual(base.areas.features[0].properties.name, 'Test Quad');
+  assert.deepStrictEqual(base.lines.features.map(function (f) { return f.properties; }), [{ 'class': 'major', name: 'Beacon Street' }, { 'class': 'path' }, { 'class': 'rail' }], 'path names are left off (the map does not label them)');
+  assert.deepStrictEqual(base.trees.features[0].geometry.coordinates, [[-71.171235, 42.3351]], 'trees, rounded to 6 places');
+  assert.ok(/^window\.CAMPUS_BASE = /m.test(OSM.toBaseJs(base).split('\n').slice(4).join('\n')), 'base.js sets window.CAMPUS_BASE');
 });
 
 test('campus import: rounds coordinates and keeps longitude first', function () {

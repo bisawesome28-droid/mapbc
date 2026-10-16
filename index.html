@@ -7,6 +7,13 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238c1d2f'/%3E%3Cpath d='M16 6a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z' fill='white'/%3E%3Ccircle cx='16' cy='13' r='2.6' fill='%238c1d2f'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <style>
+/* The map's label font (Inter, SIL Open Font License). Each name is one weight, as campus/style.js asks for it. */
+@font-face{font-family:"Inter Regular";src:url(vendor/inter-5.3.0/inter-latin-400-normal.woff2) format("woff2");font-weight:400;font-style:normal}
+@font-face{font-family:"Inter SemiBold";src:url(vendor/inter-5.3.0/inter-latin-600-normal.woff2) format("woff2");font-weight:600;font-style:normal}
+@font-face{font-family:"Inter Bold";src:url(vendor/inter-5.3.0/inter-latin-700-normal.woff2) format("woff2");font-weight:700;font-style:normal}
+@font-face{font-family:"Inter Italic";src:url(vendor/inter-5.3.0/inter-latin-400-italic.woff2) format("woff2");font-weight:400;font-style:italic}
+</style>
+<style>
 :root{
   --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --bg:#e9edf3;--surface:#ffffff;--surface2:#f4f6fa;--fg:#0f1722;--muted:#5b6678;--line:#dde2ea;
@@ -184,9 +191,6 @@ dd.none{color:var(--muted)}
 #map.z-in .wing{display:none}
 /* Labels undo the building's turn so they always read upright. */
 #map .rlabel,#map .fixl,#map .wing{transform-box:fill-box;transform-origin:center;transform:rotate(var(--rot,0deg))}
-.bl{font:600 11px/1.15 Inter,system-ui,sans-serif;color:#44506b;text-align:center;max-width:90px;pointer-events:none;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff;opacity:0;transition:opacity .2s}
-#map-wrap.bl-on .bl,.maplibregl-map.bl-on .bl{opacity:1}
-:root[data-theme="dark"] .bl{color:#c9d3ea;text-shadow:0 0 3px #10141f,0 0 3px #10141f}
 .you-dot-el{width:18px;height:18px;border-radius:50%;background:#0a6cff;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
 .you-dot-el::after{content:"";position:absolute;inset:-3px;border-radius:50%;background:#0a6cff;opacity:.35;animation:ping2 2s ease-out infinite;z-index:-1}
 @media (prefers-reduced-motion:reduce){.you-dot-el::after{animation:none;display:none}}
@@ -414,6 +418,8 @@ dd.none{color:var(--muted)}
 <script src="logic.js"></script>
 <script src="campus/config.js"></script>
 <script src="campus/data.js"></script>
+<script src="campus/base.js"></script>
+<script src="campus/style.js"></script>
 <script src="vendor/maplibre-gl-5.24.0/maplibre-gl.js"></script>
 <script>
 (function () {
@@ -425,7 +431,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 h'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 i'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -852,6 +858,7 @@ dd.none{color:var(--muted)}
   function toLngLat(x, y) { var g = geo.toGeo(x, y); return [g.lng, g.lat]; }
   function toPlan(lng, lat) { return geo.toMap(lat, lng); }
 
+  var stokesHidden = null;
   function applyView() {
     if (!map) { return; }
     var p0 = map.project(toLngLat(FULL.x, FULL.y)), px = map.project(toLngLat(FULL.x + 1000, FULL.y)), py = map.project(toLngLat(FULL.x, FULL.y + 1000));
@@ -862,13 +869,21 @@ dd.none{color:var(--muted)}
     u = 1 / Math.sqrt(a * a + b * b);
     svg.style.setProperty('--u', u.toFixed(4));
     svg.style.setProperty('--rot', (-Math.atan2(b, a) * 180 / Math.PI).toFixed(2) + 'deg');
-    map.getContainer().classList.toggle('bl-on', map.getZoom() >= 16.6);
     svg.classList.toggle('z-in', u < 1.3);
     svg.classList.toggle('labels', u < 3.6);
     // Zoomed out, Stokes looks like any other building. The inside shows only once the building fills
     // more than SHOW_INSIDE_AT of the screen, so it works the same on a phone and a laptop, with or
     // without a room or a route selected.
     var op = Math.max(0, Math.min(1, (buildingFill() - SHOW_INSIDE_AT) / FADE_OVER));
+    if (map.getPitch() > 0.5) { op = 0; } // the plan is flat: it only shows looking straight down
+    if (map.getLayer('stokes-3d')) {
+      var gone = op > 0;
+      if (gone !== stokesHidden) {
+        stokesHidden = gone;
+        map.setLayoutProperty('stokes-3d', 'visibility', gone ? 'none' : 'visible');
+        map.setLayoutProperty('stokes-name', 'visibility', gone ? 'none' : 'visible');
+      }
+    }
     svg.style.opacity = op.toFixed(3);
     svg.style.display = op > 0 ? '' : 'none';
     renderHeader(op > 0);
@@ -888,8 +903,11 @@ dd.none{color:var(--muted)}
       var p = map.project(toLngLat(q[0], q[1]));
       x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
     });
-    var c = map.getContainer();
-    return Math.max((x1 - x0) / c.clientWidth, (y1 - y0) / c.clientHeight);
+    var c = map.getContainer(), w = c.clientWidth, h = c.clientHeight;
+    // Only counts when you are looking at the building: the middle of the screen is over it (its box).
+    // Otherwise zooming in on another building, with Stokes off the screen, would count as "filling" it.
+    if (w / 2 < x0 || w / 2 > x1 || h / 2 < y0 || h / 2 > y1) { return 0; }
+    return Math.max((x1 - x0) / w, (y1 - y0) / h);
   }
   window.mapbcFill = buildingFill; // for the browser tests
 
@@ -906,13 +924,14 @@ dd.none{color:var(--muted)}
     return Math.min(padding, w / 4, hh / 4);
   }
   // Moves the camera so a box on the plan ([x0, y0, x1, y1] in plan units) fills the view.
-  function fitPlanBox(b, padding, maxZoom) {
+  // Looking inside goes flat; keepTilt keeps the current tilt (for buildings and walks outside).
+  function fitPlanBox(b, padding, maxZoom, keepTilt) {
     if (!map) { return; }
-    map.fitBounds(boundsOf(b), { padding: padFor(padding), maxZoom: maxZoom || 20.5, duration: REDUCED ? 0 : 700 });
+    map.fitBounds(boundsOf(b), { padding: padFor(padding), maxZoom: maxZoom || 20.5, pitch: keepTilt ? map.getPitch() : 0, duration: REDUCED ? 0 : 700 });
   }
   // The camera that makes the whole building just fit the screen (used for the opening view).
   function measureFit() {
-    return map.cameraForBounds(boundsOf(planBox()), { padding: padFor(40) });
+    return map.cameraForBounds(boundsOf(planBox()), { padding: padFor(40), pitch: 0 });
   }
   function planBox() {
     var pts = [];
@@ -959,7 +978,9 @@ dd.none{color:var(--muted)}
     if (b[2] - b[0] < minSize) { var cx = (b[0] + b[2]) / 2; b[0] = cx - minSize / 2; b[2] = cx + minSize / 2; }
     if (b[3] - b[1] < minSize) { var cy = (b[1] + b[3]) / 2; b[1] = cy - minSize / 2; b[3] = cy + minSize / 2; }
     highlightBuilding();
-    fitPlanBox(b, pad);
+    // A campus building or a walk outside keeps the 3D tilt (and does not zoom in too close); a room goes flat.
+    var outside = (sel && sel.kind === 'building') || (outRoute && outRoute.lnglat && outRoute.lnglat.length);
+    fitPlanBox(b, pad, outside ? 18.3 : null, outside);
   }
 
   // ---------- Campus map ----------
@@ -983,65 +1004,103 @@ dd.none{color:var(--muted)}
     }) };
   }
 
+  // How tall Stokes is drawn in 3D, in metres. A guess (about 4 floors); measure or look it up to fix.
+  var STOKES_HEIGHT = 20;
+  // The opening view is tilted so the buildings show in 3D. Looking inside a building always goes back to
+  // straight down, because the floor plan is flat.
+  var OPEN_PITCH = 45, MAX_PITCH = 60;
+  var BASE = window.CAMPUS_BASE || null, STYLE = window.CAMPUS_STYLE || null;
+
   function initMap() {
     var bm = BASEMAPS[CAMPUS.basemap] || BASEMAPS['osm-dev'];
-    map = new maplibregl.Map({
+    var opts = {
       container: 'world',
-      center: toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2), zoom: 17.2, maxZoom: 22, maxPitch: 0,
-      attributionControl: false, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+      center: toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2), zoom: 17.2, maxZoom: 22, maxPitch: MAX_PITCH,
+      attributionControl: false, pitchWithRotate: true, touchPitch: true,
       style: { version: 8, sources: { base: { type: 'raster', tiles: bm.tiles, tileSize: 256, maxzoom: bm.maxzoom, attribution: bm.attribution } },
         layers: [{ id: 'base', type: 'raster', source: 'base' }] }
-    });
-    map.touchZoomRotate.disableRotation(); // north stays up; the plan turns, its labels do not
+    };
+    // Keep the camera near the campus (the map data stops a little past its edge).
+    if (BASE && BASE.bounds) {
+      var bb = BASE.bounds, padX = (bb[2] - bb[0]) * 0.15, padY = (bb[3] - bb[1]) * 0.15;
+      opts.maxBounds = [[bb[0] - padX, bb[1] - padY], [bb[2] + padX, bb[3] + padY]];
+      opts.minZoom = 14;
+    }
+    map = new maplibregl.Map(opts);
+    // North stays up (the plan turns, its labels do not). Tilting is allowed: right-drag or ctrl-drag with a
+    // mouse, two fingers up or down on a phone. Only the turning part of the mouse drag is switched off.
+    map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
+    if (map.dragRotate._mouseRotate) { map.dragRotate._mouseRotate.disable(); }
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     map.getCanvasContainer().appendChild(svg); // the floor plan moves with the map
     window.mapbcMap = map; // handy for testing and for poking at the map from the browser console
     map.on('move', applyView);
+    map.on('moveend', flattenIfInside);
     map.on('resize', applyView);
     map.on('click', onMapClick);
     applyView();
-    // Open on the building with campus around it: a little further out than "the building fits".
+    // Open on the building with campus around it: a little further out than "the building fits", tilted.
     var cam = measureFit();
-    if (cam) { map.jumpTo({ center: cam.center, zoom: cam.zoom - START_ZOOM_OUT }); }
+    if (cam) { map.jumpTo({ center: cam.center, zoom: cam.zoom - START_ZOOM_OUT, pitch: REDUCED ? 0 : OPEN_PITCH }); }
     applyView();
   }
 
-  function addCampusLayers() {
-    map.addSource('buildings', { type: 'geojson', data: CDATA.buildings || EMPTY });
-    map.addSource('paths', { type: 'geojson', data: CDATA.paths || EMPTY });
-    map.addSource('foot', { type: 'geojson', data: footprint() });
-    // Building names (the base map's own names are hidden under our building shapes).
+  // Zoomed in far enough to see inside, but tilted: tip the map back to straight down so the plan lines up.
+  function flattenIfInside() {
+    if (!map || map.getPitch() < 0.5 || map.isMoving()) { return; }
+    if (buildingFill() >= SHOW_INSIDE_AT) { map.easeTo({ pitch: 0, duration: REDUCED ? 0 : 400 }); }
+  }
+
+  // Campus buildings with their heights (from base.js) for the 3D layer.
+  function buildingsWithHeights() {
+    var hs = (BASE && BASE.heights) || {};
     (CDATA.buildings && CDATA.buildings.features || []).forEach(function (f) {
-      var n = f.properties && f.properties.name;
-      if (!n || isStokes(n)) { return; }
-      var el = document.createElement('div'); el.className = 'bl'; el.textContent = n;
-      new maplibregl.Marker({ element: el }).setLngLat(bldgCenter(f)).addTo(map);
+      var h = hs[f.properties.osm];
+      if (h) { f.properties.h = h.h; }
     });
+    return CDATA.buildings || EMPTY;
+  }
+  function boundsBox() {
+    var b = BASE.bounds;
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]], [b[0], b[1]]]] } }] };
+  }
+  function stokesLabelPoint() {
+    var c = toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2);
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } }] };
+  }
+  function palette() { return STYLE.palettes[document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light']; }
+
+  function addCampusLayers() {
+    var foot = footprint();
+    foot.features.forEach(function (f) { f.properties.h = STOKES_HEIGHT; });
+    map.addSource('buildings', { type: 'geojson', data: buildingsWithHeights() });
+    map.addSource('paths', { type: 'geojson', data: CDATA.paths || EMPTY });
+    map.addSource('foot', { type: 'geojson', data: foot });
+    map.addSource('foot-label', { type: 'geojson', data: stokesLabelPoint() });
     map.addSource('route-out', { type: 'geojson', data: EMPTY });
     map.addSource('you-acc', { type: 'geojson', data: EMPTY });
+    var styled = !!(STYLE && BASE);
+    if (styled) {
+      map.addSource('b-land', { type: 'geojson', data: boundsBox() });
+      map.addSource('b-areas', { type: 'geojson', data: BASE.areas });
+      map.addSource('b-lines', { type: 'geojson', data: BASE.lines });
+      map.addSource('b-houses', { type: 'geojson', data: BASE.houses });
+      map.addSource('b-trees', { type: 'geojson', data: BASE.trees });
+      map.addSource('campus-area', { type: 'geojson', data: CDATA.campus || EMPTY });
+      STYLE.ground(palette()).forEach(function (l) { map.addLayer(l); });
+    }
 
-    // Campus buildings are already drawn by the base map. This layer is nearly invisible: it is there so
-    // a tap can tell which building you tapped, and to outline the one you picked. Stokes uses its own shape.
     var notStokes = ['!', ['in', 'Stokes Hall', ['coalesce', ['get', 'name'], '']]];
-    // Our own clean look on top of a quiet base map: soft walkways, and buildings with a fill and a crisp edge.
-    var light = ['!=', ['get', 'highway'], 'steps'];
-    map.addLayer({ id: 'walk-casing', type: 'line', source: 'paths', filter: light, layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#b9c0cc', 'line-opacity': 0.55, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 19, 7, 21, 14] } });
-    map.addLayer({ id: 'walk', type: 'line', source: 'paths', filter: light, layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 0.8, 19, 4.5, 21, 10] } });
-    map.addLayer({ id: 'buildings-fill', type: 'fill', source: 'buildings', filter: notStokes, paint: { 'fill-color': '#c4cde0', 'fill-opacity': 0.92 } });
-    map.addLayer({ id: 'buildings-edge', type: 'line', source: 'buildings', filter: notStokes, paint: { 'line-color': '#7f8cab', 'line-opacity': 0.9, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 0.6, 19, 1.6] } });
+    // Invisible: tells which building a tap landed on.
     map.addLayer({ id: 'buildings', type: 'fill', source: 'buildings', filter: notStokes, paint: { 'fill-color': '#0a6cff', 'fill-opacity': 0.01 } });
-    map.addLayer({ id: 'building-sel', type: 'line', source: 'buildings', filter: ['==', ['get', 'osm'], ''], paint: { 'line-color': '#0a6cff', 'line-width': 3 } });
-    // Walking paths. Steps are dashed red so you can see where a route is not step-free.
+    // The path network (the "Show path network" switch). Steps are dashed red so you can see where a route is not step-free.
     map.addLayer({ id: 'paths', type: 'line', source: 'paths', filter: ['!=', ['get', 'highway'], 'steps'], layout: { visibility: 'none' },
       paint: { 'line-color': '#2b6cb0', 'line-opacity': 0.45, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1, 20, 4] } });
     map.addLayer({ id: 'paths-steps', type: 'line', source: 'paths', filter: ['==', ['get', 'highway'], 'steps'], layout: { visibility: 'none' },
       paint: { 'line-color': '#c0392b', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 20, 5], 'line-dasharray': [1, 1] } });
-    // Stokes from outside: a soft maroon tint and outline that say "this one has an indoor map". The inside covers it when zoomed in.
-    map.addLayer({ id: 'foot', type: 'fill', source: 'foot', paint: { 'fill-color': '#8c1d2f', 'fill-opacity': 0.28 } });
-    map.addLayer({ id: 'foot-line', type: 'line', source: 'foot', paint: { 'line-color': '#8c1d2f', 'line-width': 2, 'line-opacity': 0.8 } });
+    // Stokes's footprint on the ground (under the 3D block), so a tap on it works at any tilt.
+    map.addLayer({ id: 'foot', type: 'fill', source: 'foot', paint: { 'fill-color': '#8c1d2f', 'fill-opacity': styled ? 0.01 : 0.28 } });
     map.addLayer({ id: 'you-acc', type: 'fill', source: 'you-acc', paint: { 'fill-color': '#0a6cff', 'fill-opacity': 0.12 } });
     map.addLayer({ id: 'you-acc-line', type: 'line', source: 'you-acc', paint: { 'line-color': '#0a6cff', 'line-opacity': 0.4, 'line-width': 1 } });
     // The outdoor part of a route: solid along walkways, dashed when it is only a straight line.
@@ -1051,34 +1110,46 @@ dd.none{color:var(--muted)}
       paint: { 'line-color': '#0a6cff', 'line-width': 5 } });
     map.addLayer({ id: 'route-out-straight', type: 'line', source: 'route-out', filter: ['get', 'straight'], layout: { 'line-cap': 'round' },
       paint: { 'line-color': '#0a6cff', 'line-width': 4, 'line-dasharray': [1.5, 1.5] } });
+    if (styled) {
+      STYLE.top(palette()).forEach(function (l) { map.addLayer(l); });
+    } else {
+      map.addLayer({ id: 'foot-line', type: 'line', source: 'foot', paint: { 'line-color': '#8c1d2f', 'line-width': 2, 'line-opacity': 0.8 } });
+    }
 
-    map.on('click', 'foot', function () { if (svg.style.display === 'none') { showAll(); } });
-    map.on('mouseenter', 'foot', function () { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', 'foot', function () { map.getCanvas().style.cursor = ''; });
+    ['foot', 'stokes-3d'].forEach(function (id) {
+      if (!map.getLayer(id)) { return; }
+      map.on('click', id, function () { if (svg.style.display === 'none') { showAll(); } });
+      map.on('mouseenter', id, function () { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', id, function () { map.getCanvas().style.cursor = ''; });
+    });
     mapTheme();
+    highlightBuilding();
+    applyView();
   }
 
-  // Dark mode for the base map: flip its brightness and turn the colours back round.
+  // Light or dark: recolour every styled layer from campus/style.js, and fade the fallback base map
+  // (it only shows past the edge of the campus data).
   function mapTheme() {
     if (!map || !map.getLayer('base')) { return; }
     var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    // A quiet, washed-out base so our own buildings, walkways and route stand out.
     map.setPaintProperty('base', 'raster-brightness-min', dark ? 0.78 : 0.25);
     map.setPaintProperty('base', 'raster-brightness-max', dark ? 0.14 : 1);
     map.setPaintProperty('base', 'raster-saturation', dark ? -0.8 : -0.6);
     map.setPaintProperty('base', 'raster-contrast', dark ? 0 : -0.3);
     map.setPaintProperty('base', 'raster-hue-rotate', dark ? 180 : 0);
-    if (map.getLayer('buildings-fill')) {
-      map.setPaintProperty('buildings-fill', 'fill-color', dark ? '#2a3550' : '#c4cde0');
-      map.setPaintProperty('buildings-edge', 'line-color', dark ? '#5c6c93' : '#7f8cab');
-      map.setPaintProperty('walk', 'line-color', dark ? '#46506a' : '#ffffff');
-      map.setPaintProperty('walk-casing', 'line-color', dark ? '#1b2234' : '#b9c0cc');
-    }
+    if (!STYLE || !map.getLayer('land')) { return; }
+    STYLE.ground(palette()).concat(STYLE.top(palette())).forEach(function (l) {
+      if (!map.getLayer(l.id)) { return; }
+      Object.keys(l.paint || {}).forEach(function (k) { map.setPaintProperty(l.id, k, l.paint[k]); });
+    });
+    highlightBuilding();
   }
 
+  // The building you picked turns blue (in 3D).
   function highlightBuilding() {
-    if (!map || !map.getLayer('building-sel')) { return; }
-    map.setFilter('building-sel', ['==', ['get', 'osm'], sel && sel.kind === 'building' ? sel.o.properties.osm : '']);
+    if (!map || !map.getLayer('buildings-3d')) { return; }
+    var c = palette(), id = sel && sel.kind === 'building' ? sel.o.properties.osm : '';
+    map.setPaintProperty('buildings-3d', 'fill-extrusion-color', ['case', ['==', ['get', 'osm'], id], c.selected, c.building]);
   }
 
   function drawOutRoute() {
@@ -1101,7 +1172,9 @@ dd.none{color:var(--muted)}
     var m = t && svg.contains(t) ? pick(t) : null;
     if (m) { act(m); return; }
     // Not on the floor plan: did the tap land on a named campus building?
-    var hit = map.getLayer('buildings') ? map.queryRenderedFeatures(e.point, { layers: ['buildings'] }) : [];
+    // (The 3D layer first, so a tap on a tilted building's roof counts.)
+    var layers = ['buildings-3d', 'buildings'].filter(function (id) { return map.getLayer(id); });
+    var hit = layers.length ? map.queryRenderedFeatures(e.point, { layers: layers }) : [];
     for (var i = 0; i < hit.length; i++) {
       var f = buildingByOsm(hit[i].properties.osm);
       if (f) { choose({ kind: 'building', o: f }); return; }
@@ -1992,7 +2065,17 @@ dd.none{color:var(--muted)}
   SPOTS.forEach(function (s) { if (s.id === start.spot) { sel = { kind: 'spot', o: s }; } });
   if (sel) { input.value = titleOf(sel); }
   showLevel(curLevel);
-  if (window.maplibregl) {
+  // The map draws its labels with the Inter font, so load it first (at most a second and a half; if it is
+  // slow or missing, labels use the phone's own font).
+  function fontsReady() {
+    if (!document.fonts || !document.fonts.load || !window.CAMPUS_STYLE) { return Promise.resolve(); }
+    var f = window.CAMPUS_STYLE.fonts, all = Object.keys(f).map(function (name) {
+      var ws = f[name].split(' ');
+      return document.fonts.load(ws[1] + ' ' + ws[0] + ' 16px "' + name + '"').catch(function () {});
+    });
+    return Promise.race([Promise.all(all), new Promise(function (ok) { setTimeout(ok, 1500); })]);
+  }
+  if (window.maplibregl) fontsReady().then(function () {
     initMap();
     map.on('load', function () {
       addCampusLayers();
@@ -2000,7 +2083,7 @@ dd.none{color:var(--muted)}
       update(!!sel);
       if (from === 'ME' && !locOn) { toggleLocate(); }
     });
-  } else {
+  }); else {
     // The map library did not load (it should be in vendor/). Say so instead of failing silently.
     $('levelbar').style.display = '';
     $('levelbar').textContent = 'The map could not load (vendor/maplibre-gl-5.24.0/maplibre-gl.js is missing).';

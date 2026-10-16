@@ -33,12 +33,27 @@ and plan to pitch schools to supply their own floor plans. Stokes Hall Level 1 i
   (`applyView` in index.html). Labels and markers undo the building's turn so they stay upright, and keep a steady size on screen.
 - Taps go through the map's own click event (`onMapClick`), which only fires when the map was not dragged.
 - Version 5 of MapLibre is used on purpose: version 6 only ships as ES modules, which browsers refuse to load from a file opened straight from disk.
-- The base map is OpenStreetMap's own tiles (`CAMPUS.basemap = "osm-dev"`): fine for testing, not for launch (their policy is light use).
-  Without internet the base map is blank but the floor plan, search and routes still work.
+- **How the campus looks (3D):** the campus is drawn by us, not by a picture from a tile server. `campus/base.js` has the grass,
+  roads, paths, parking, water, trees, nearby houses and each building's height; `campus/style.js` says how each is drawn
+  (colours for light and dark mode, line widths, 3D buildings, labels) in MapLibre's standard style format, which the iOS and
+  Android versions of MapLibre also read. Restyle the map by editing `PALETTES` in style.js.
+- **Tilt:** the map opens tilted 45 degrees so buildings show in 3D. Tilt with a right-drag (or ctrl-drag) on a laptop, or two fingers
+  up/down on a phone. North stays up. The floor plan is flat, so it only shows looking straight down: zooming into Stokes while tilted
+  tips the map flat (`flattenIfInside`), and picking a room, "All" and "Show inside" go flat too. Picking a campus building or
+  planning a walk keeps the tilt.
+- **Building heights:** only 36 of about 1,860 buildings in the area have a height or floor count in OpenStreetMap; the rest are
+  guesses (campus buildings 15 m, residence halls 17 m, houses 8 m), marked `guess: 1` in base.js. Stokes is drawn 20 m tall
+  (`STOKES_HEIGHT` in index.html, a guess). Adding `building:levels` in OpenStreetMap fixes a building on the next import.
+- **Labels** (building, road and lawn names) use the Inter font (`vendor/inter-5.3.0/`, SIL Open Font License). In a browser MapLibre
+  draws the letters itself from that font, so there are no font files to host. **For a native app** MapLibre needs the font as
+  "glyph" files instead: make them once from the same Inter font (MapLibre's font-maker tool) and add a `glyphs` URL to the style.
+- **Past the edge of the campus data** (and only there) the map shows OpenStreetMap's own tiles, faded (`CAMPUS.basemap = "osm-dev"`):
+  fine for testing, not for launch. The camera cannot wander far past the data (`maxBounds`). Without internet the campus still draws.
 
 ### Campus data and outdoor routes
-- `campus/data.js` holds the campus boundary, buildings, walking paths and entrances (GeoJSON, **[lng, lat]** order), imported Oct 16, 2026:
-  170 buildings inside BC's campus boundary (121 named; nearby houses left out), 1,107 walkways (33 with steps), 36 entrances.
+- `campus/data.js` holds the campus boundary, buildings, walking paths and entrances (GeoJSON, **[lng, lat]** order), imported Oct 16, 2026
+  (second import, slightly bigger area): 181 buildings inside BC's campus boundary (126 named; buildings outside the boundary are only
+  drawn, not searchable), 1,561 roads and walkways, 39 entrances.
   It is a .js file (not .geojson) so the page works from disk.
 - To refresh it: `python3 tools/fetch_osm.py` (downloads the BC area from api.openstreetmap.org in small squares), then
   `node tools/osm_to_campus.js campus/osm_export.geojson`. The raw export is not committed (.gitignore).
@@ -80,9 +95,10 @@ Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons nee
 - tests.js: run `node tests.js` to check search and routing. Run it after every data.js edit.
 - rooms.csv: spreadsheet template for real room data (door numbers, landmarks, verified flag).
 - pipeline_prototype/: optional prototype that finds rooms in a color-coded floor plan image.
-- campus/: campus settings (config.js) and campus data (data.js, from OpenStreetMap). tools/fetch_osm.py downloads it and tools/osm_to_campus.js converts it.
+- campus/: campus settings (config.js), campus data for search and directions (data.js), what the map draws around it (base.js), and
+  how it all looks (style.js). tools/fetch_osm.py downloads from OpenStreetMap and tools/osm_to_campus.js writes data.js and base.js.
 - tools/fit_plan_to_osm.py: places a traced floor plan on the real map by fitting its outline onto OpenStreetMap's footprint (prints GEO points). Used for Stokes; use it for each new building.
-- vendor/: the MapLibre map library (version 5.24.0, BSD license), stored here so the page needs no CDN.
+- vendor/: the MapLibre map library (version 5.24.0, BSD license) and the Inter font (5.3.0, SIL Open Font License), stored here so the page needs no CDN.
 - campus.html: just sends old links to index.html.
 
 ## What works now

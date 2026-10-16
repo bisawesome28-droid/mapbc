@@ -2,7 +2,8 @@
 """Downloads campus map data from OpenStreetMap and saves it as campus/osm_export.geojson.
 
 It asks OpenStreetMap's main server (api.openstreetmap.org) for a box of the map, in small squares
-(the server refuses big ones), keeps buildings, walking paths, entrances and the campus boundary, and writes GeoJSON in the
+(the server refuses big ones), keeps buildings, roads and paths, entrances, the campus boundary, and what the map draws
+around them (grass, parking, sports fields, water, trees, railways), and writes GeoJSON in the
 same shape as an Overpass Turbo export. Then turn it into campus/data.js with:
 
   python3 tools/fetch_osm.py                      # the default box is Boston College's Chestnut Hill campus
@@ -18,7 +19,20 @@ import xml.etree.ElementTree as ET
 API = 'https://api.openstreetmap.org/api/0.6/map?bbox={w},{s},{e},{n}'
 UA = 'mapbc-campus-import/1.0 (student campus map project)'
 STEP = 0.004  # degrees per square; small enough to stay under the server's limits
-BC = (42.3300, -71.1790, 42.3430, -71.1595)  # south, west, north, east
+BC = (42.3280, -71.1820, 42.3450, -71.1560)  # south, west, north, east (campus plus a little around it)
+
+# Kinds of area the map draws (grass, parking and so on), as OpenStreetMap tag -> values ('*' = any value).
+AREAS = {'landuse': '*', 'leisure': '*', 'natural': '*', 'amenity': ('parking', 'university', 'college'),
+         'waterway': ('riverbank', 'dock'), 'place': ('square',), 'area:highway': '*'}
+
+
+def is_area(tags):
+    if 'building' in tags:
+        return True
+    for k, v in AREAS.items():
+        if k in tags and (v == '*' or tags[k] in v) and tags.get('natural') != 'coastline':
+            return True
+    return tags.get('highway') == 'pedestrian' and tags.get('area') == 'yes'
 
 
 def fetch(s, w, n, e):
@@ -87,15 +101,13 @@ def main():
         c = coords(refs)
         if len(c) < 2:
             continue
-        if 'building' in tags and len(c) >= 4 and refs[0] == refs[-1]:
+        closed = refs[0] == refs[-1] and len(c) >= 4
+        if closed and is_area(tags) and not ('highway' in tags and tags.get('area') != 'yes' and 'building' not in tags):
             feats.append({'type': 'Feature', 'id': 'way/' + wid, 'properties': tags, 'geometry': {'type': 'Polygon', 'coordinates': [c]}})
-        elif tags.get('amenity') in ('university', 'college') and refs[0] == refs[-1] and len(c) >= 4:
-            feats.append({'type': 'Feature', 'id': 'way/' + wid, 'properties': tags, 'geometry': {'type': 'Polygon', 'coordinates': [c]}})
-        elif 'highway' in tags:
+        elif 'highway' in tags or 'railway' in tags or 'barrier' in tags or tags.get('natural') == 'tree_row':
             feats.append({'type': 'Feature', 'id': 'way/' + wid, 'properties': tags, 'geometry': {'type': 'LineString', 'coordinates': c}})
     for rid, (members, tags) in rels.items():
-        campus = tags.get('amenity') in ('university', 'college')
-        if ('building' not in tags and not campus) or tags.get('type') != 'multipolygon':
+        if not is_area(tags) or tags.get('type') != 'multipolygon':
             continue
         outer = join_rings([coords(ways[ref][0]) for t, ref, role in members if t == 'way' and role in ('outer', '') and ref in ways])
         inner = join_rings([coords(ways[ref][0]) for t, ref, role in members if t == 'way' and role == 'inner' and ref in ways])
@@ -103,7 +115,7 @@ def main():
             geom = {'type': 'Polygon', 'coordinates': [outer[0]] + inner} if len(outer) == 1 else {'type': 'MultiPolygon', 'coordinates': [[r] for r in outer]}
             feats.append({'type': 'Feature', 'id': 'relation/' + rid, 'properties': tags, 'geometry': geom})
     for nid, (lon, lat, tags) in nodes.items():
-        if 'entrance' in tags:
+        if 'entrance' in tags or tags.get('natural') == 'tree':
             feats.append({'type': 'Feature', 'id': 'node/' + nid, 'properties': tags, 'geometry': {'type': 'Point', 'coordinates': [lon, lat]}})
 
     with open(a.out, 'w') as f:
