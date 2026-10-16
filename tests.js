@@ -435,5 +435,109 @@ test('campus files: the shipped data files are valid GeoJSON', function () {
   });
 });
 
+// ---------- GPS blue dot ----------
+
+// Builds control points from a plan placed at a made-up spot on the ground: rotation in degrees,
+// units per metre, and the map position of the centre. Lets the tests know the right answer.
+function fakeWorld(rotDeg, unitsPerMeter, noiseMeters) {
+  var lat0 = 42.335, lng0 = -71.168, mLat = 111000, mLng = 82000, a = rotDeg * Math.PI / 180;
+  var seed = 7;
+  function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647 - 0.5; }
+  function toMap(lat, lng) {
+    var e = (lng - lng0) * mLng, s = -(lat - lat0) * mLat;
+    return { x: 1100 + unitsPerMeter * (Math.cos(a) * e - Math.sin(a) * s), y: 900 + unitsPerMeter * (Math.sin(a) * e + Math.cos(a) * s) };
+  }
+  var spots = [[0, 0], [150, 40], [-90, 120], [60, -110], [-30, -70]];
+  var pts = spots.map(function (m) {
+    var lat = lat0 - (m[1] + (noiseMeters ? rnd() * 2 * noiseMeters : 0)) / mLat, lng = lng0 + (m[0] + (noiseMeters ? rnd() * 2 * noiseMeters : 0)) / mLng;
+    var p = toMap(lat0 - m[1] / mLat, lng0 + m[0] / mLng); // true map position of that real spot
+    return { lat: lat, lng: lng, x: p.x, y: p.y };
+  });
+  return { pts: pts, toMap: toMap, lat0: lat0, lng0: lng0 };
+}
+
+test('GPS: a clean fit recovers scale, turn and positions exactly', function () {
+  var w = fakeWorld(30, 10, 0);
+  var g = ML.fitGeo(w.pts);
+  assert.ok(Math.abs(g.unitsPerMeter - 10 * Math.sqrt(1)) < 0.2, 'scale ' + g.unitsPerMeter);
+  assert.ok(g.rmsMeters < 0.5, 'rms ' + g.rmsMeters);
+  // A spot we did not give it: 40 m east, 25 m north of the centre.
+  var lat = w.lat0 + 25 / 111000, lng = w.lng0 + 40 / 82000;
+  var want = w.toMap(lat, lng), got = g.toMap(lat, lng);
+  assert.ok(Math.abs(want.x - got.x) < 4 && Math.abs(want.y - got.y) < 4, 'got ' + got.x + ',' + got.y + ' want ' + want.x + ',' + want.y);
+});
+
+test('GPS: toGeo undoes toMap', function () {
+  var g = ML.fitGeo(fakeWorld(-75, 8, 0).pts);
+  var m = g.toMap(42.3351, -71.1675), back = g.toGeo(m.x, m.y);
+  assert.ok(Math.abs(back.lat - 42.3351) < 1e-9 && Math.abs(back.lng + 71.1675) < 1e-9);
+});
+
+test('GPS: two points work but cannot report a fit error; three or more can', function () {
+  var w = fakeWorld(10, 12, 0);
+  var two = ML.fitGeo(w.pts.slice(0, 2));
+  assert.ok(two && two.rmsMeters === null);
+  assert.ok(ML.fitGeo(w.pts).rmsMeters !== null);
+});
+
+test('GPS: a few metres of noise in the control points shows up as a few metres of error', function () {
+  var g = ML.fitGeo(fakeWorld(20, 10, 3).pts);
+  assert.ok(g.rmsMeters > 0.2 && g.rmsMeters < 6, 'rms ' + g.rmsMeters);
+});
+
+test('GPS: a typo in one control point is flagged as the worst one', function () {
+  var pts = fakeWorld(20, 10, 0).pts;
+  pts[3].lat += 0.0005; // about 55 m off
+  var g = ML.fitGeo(pts);
+  assert.strictEqual(g.worstIndex, 3);
+  assert.ok(g.worstMeters > 15, 'worst ' + g.worstMeters);
+});
+
+test('GPS: too few or identical points give no fit', function () {
+  assert.strictEqual(ML.fitGeo([]), null);
+  assert.strictEqual(ML.fitGeo([{ lat: 42, lng: -71, x: 1, y: 1 }]), null);
+  assert.strictEqual(ML.fitGeo([{ lat: 42, lng: -71, x: 1, y: 1 }, { lat: 42, lng: -71, x: 500, y: 500 }]), null);
+  assert.strictEqual(ML.fitGeo([{ lat: 'x', lng: -71, x: 1, y: 1 }, { lat: 42, lng: -71, x: 1, y: 1 }]), null);
+});
+
+test('GPS: smoother trusts good readings more than bad ones', function () {
+  var s = ML.createSmoother({ speed: 10 });
+  s.update(100, 100, 5, 0);
+  var bad = s.update(300, 100, 200, 1000);   // far-off reading with a huge error
+  assert.ok(bad.x < 130, 'bad reading moved the dot to ' + bad.x);
+  var s2 = ML.createSmoother({ speed: 10 });
+  s2.update(100, 100, 5, 0);
+  var good = s2.update(120, 100, 5, 1000);   // reading with the same small error
+  assert.ok(good.x > 105 && good.x < 120, 'good reading put the dot at ' + good.x);
+});
+
+test('GPS: smoother lets the dot follow someone who keeps walking', function () {
+  var s = ML.createSmoother({ speed: 15 }), out;
+  for (var t = 0; t <= 20; t++) { out = s.update(100 + t * 14, 100, 10, t * 1000); }
+  assert.ok(out.x > 330, 'dot lagged far behind: ' + out.x);
+});
+
+test('GPS: describeFix finds the nearest entrance and whether you are on the plan', function () {
+  var ctx = { metersPerUnit: 0.1, bounds: { x: 0, y: 0, w: 1000, h: 800 }, entrances: D.ENTRANCES.map(function (e) { return { id: e.id, name: e.name, x: e.x, y: e.y }; }) };
+  var near = ML.describeFix({ x: 110, y: 790, accuracy: 6 }, ctx);
+  assert.strictEqual(near.nearest.id, 'E-S-WEST');
+  assert.ok(near.inside && near.offMapMeters === 0 && Math.abs(near.radius - 60) < 1e-9);
+  var far = ML.describeFix({ x: 3000, y: 400, accuracy: 6 }, ctx);
+  assert.ok(!far.inside && Math.abs(far.offMapMeters - 200) < 1e-6, 'off ' + far.offMapMeters);
+});
+
+test('real data: GPS control points (if any) are usable and fit well', function () {
+  var pts = (D.GEO && D.GEO.points) || [];
+  if (!pts.length) { return; } // not calibrated yet: fine, the page says so
+  var g = ML.fitGeo(pts);
+  assert.ok(g, 'GEO.points need at least 2 different points with numeric lat, lng, x and y');
+  if (g.rmsMeters !== null) {
+    assert.ok(g.rmsMeters < 8, 'control points miss by ' + g.rmsMeters.toFixed(1) + ' m on average; check point ' + g.worstIndex + ' (' + (pts[g.worstIndex].label || '') + ') for a typo');
+  }
+  // The fitted scale should roughly agree with SCALE.feetPerUnit once that is measured.
+  var feetPerUnit = 1 / (g.unitsPerMeter * 3.28084);
+  if (D.SCALE && !D.SCALE.guess) { assert.ok(Math.abs(feetPerUnit / D.SCALE.feetPerUnit - 1) < 0.15, 'GPS scale ' + feetPerUnit.toFixed(3) + ' ft/unit vs SCALE ' + D.SCALE.feetPerUnit); }
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

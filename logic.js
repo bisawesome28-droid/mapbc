@@ -370,6 +370,132 @@
     return { steps: steps, feet: feet, minutes: Math.max(1, Math.round(feet / FEET_PER_MINUTE + extraMinutes)) };
   }
 
+  // ---------- GPS: from latitude and longitude to map units ----------
+  // The floor plan is a picture, so its x and y mean nothing to a phone. To draw a blue dot we tie the
+  // picture to the real world with "control points": spots on the plan where we know both the map position
+  // (x, y) and the real GPS position (lat, lng). From those we work out how the plan is placed, turned and
+  // scaled on the ground. Two points are enough, three or more also tell us how far off the fit is.
+
+  var RAD = Math.PI / 180;
+
+  // Metres in one degree of latitude and of longitude at a given latitude.
+  function metersPerDegree(lat) {
+    var p = lat * RAD;
+    return {
+      lat: 111132.92 - 559.82 * Math.cos(2 * p) + 1.175 * Math.cos(4 * p),
+      lng: 111412.84 * Math.cos(p) - 93.5 * Math.cos(3 * p)
+    };
+  }
+
+  function num(v) { return typeof v === 'number' && isFinite(v); }
+  function validControl(c) {
+    return !!c && num(c.lat) && num(c.lng) && num(c.x) && num(c.y) && Math.abs(c.lat) <= 90 && Math.abs(c.lng) <= 180;
+  }
+
+  // points: [{ lat, lng, x, y }]. Returns null when there are fewer than 2 usable points or they are all
+  // in the same place. Otherwise:
+  //   toMap(lat, lng) -> { x, y }       toGeo(x, y) -> { lat, lng }
+  //   unitsPerMeter      how many map units one real metre covers
+  //   rotationDeg        how far the plan is turned from "up is north"
+  //   rmsMeters          typical miss of the control points (null with only 2 points: nothing to check against)
+  //   worstMeters, worstIndex   the control point that fits worst, for finding a typo
+  // The fit keeps the plan's shape (no stretching): move, turn and resize only, because it is a picture of
+  // a building drawn to scale.
+  function fitGeo(points) {
+    var pts = (points || []).filter(validControl);
+    if (pts.length < 2) { return null; }
+    var n = pts.length, lat0 = 0, lng0 = 0;
+    pts.forEach(function (c) { lat0 += c.lat / n; lng0 += c.lng / n; });
+    var mp = metersPerDegree(lat0);
+    // Local flat plane in metres: e grows east, s grows SOUTH (so it points the same way as map y).
+    function toLocal(lat, lng) { return { e: (lng - lng0) * mp.lng, s: -(lat - lat0) * mp.lat }; }
+    function fromLocal(e, s) { return { lat: lat0 - s / mp.lat, lng: lng0 + e / mp.lng }; }
+    var L = pts.map(function (c) { var l = toLocal(c.lat, c.lng); return { e: l.e, s: l.s, x: c.x, y: c.y }; });
+    var me = 0, ms = 0, mx = 0, my = 0;
+    L.forEach(function (p) { me += p.e / n; ms += p.s / n; mx += p.x / n; my += p.y / n; });
+    var a = 0, b = 0, den = 0;
+    L.forEach(function (p) {
+      var e = p.e - me, s = p.s - ms, x = p.x - mx, y = p.y - my;
+      a += e * x + s * y; b += e * y - s * x; den += e * e + s * s;
+    });
+    if (den < 1e-6) { return null; }
+    // map = [[p, -q], [q, p]] * (e, s) + (tx, ty): a turn plus a resize, written as two numbers.
+    var p = a / den, q = b / den;
+    var tx = mx - (p * me - q * ms), ty = my - (q * me + p * ms);
+    var scale = Math.sqrt(p * p + q * q);
+    if (scale < 1e-9) { return null; }
+
+    function localToMap(e, s) { return { x: p * e - q * s + tx, y: q * e + p * s + ty }; }
+    function toMap(lat, lng) { var l = toLocal(lat, lng); return localToMap(l.e, l.s); }
+    function toGeo(x, y) {
+      var dx = x - tx, dy = y - ty, k = scale * scale;
+      return fromLocal((p * dx + q * dy) / k, (-q * dx + p * dy) / k);
+    }
+
+    var sumSq = 0, worst = -1, worstM = 0;
+    pts.forEach(function (c, i) {
+      var m = toMap(c.lat, c.lng), miss = Math.sqrt((m.x - c.x) * (m.x - c.x) + (m.y - c.y) * (m.y - c.y)) / scale;
+      sumSq += miss * miss;
+      if (miss > worstM) { worstM = miss; worst = i; }
+    });
+    return {
+      count: n,
+      toMap: toMap, toGeo: toGeo,
+      unitsPerMeter: scale,
+      rotationDeg: Math.atan2(q, p) / RAD,
+      rmsMeters: n >= 3 ? Math.sqrt(sumSq / n) : null,
+      worstMeters: n >= 3 ? worstM : null,
+      worstIndex: n >= 3 ? worst : -1
+    };
+  }
+
+  // Phone GPS jumps around by several metres even when you stand still. This keeps a running best guess:
+  // a reading with a small error (accuracy) moves the dot a lot, a poor reading barely moves it, and
+  // the longer it has been since the last reading the more the dot is allowed to have moved.
+  // Positions are in map units. opts.speed is how far a walking person can go per second, in map units.
+  function createSmoother(opts) {
+    var speed = (opts && opts.speed) || 15, minAcc = (opts && opts.minAccuracy) || 1;
+    var s = null;
+    return {
+      // x, y: reading in map units. acc: its error in map units. t: time in milliseconds.
+      update: function (x, y, acc, t) {
+        var r = Math.max(acc, minAcc), rv = r * r;
+        if (!s) { s = { x: x, y: y, v: rv, t: t }; return { x: s.x, y: s.y, acc: Math.sqrt(s.v) }; }
+        var dt = Math.max(0, (t - s.t) / 1000), drift = speed * dt;
+        s.v += drift * drift;
+        var k = s.v / (s.v + rv);
+        s.x += k * (x - s.x); s.y += k * (y - s.y);
+        s.v *= 1 - k; s.t = t;
+        return { x: s.x, y: s.y, acc: Math.sqrt(s.v) };
+      },
+      reset: function () { s = null; }
+    };
+  }
+
+  // Works out what to show for a position on the plan.
+  // pos: { x, y, accuracy } with x and y in map units and accuracy in metres.
+  // ctx: { metersPerUnit, bounds: { x, y, w, h }, entrances: [...] }
+  // Returns { x, y, radius (map units), accuracyMeters, inside, offMapMeters, nearest: { id, name, meters } }.
+  // "inside" means the position is on the plan. Otherwise offMapMeters says how far away from it you are.
+  function describeFix(pos, ctx) {
+    var mpu = ctx.metersPerUnit, b = ctx.bounds;
+    var dx = Math.max(b.x - pos.x, 0, pos.x - (b.x + b.w)), dy = Math.max(b.y - pos.y, 0, pos.y - (b.y + b.h));
+    var off = Math.sqrt(dx * dx + dy * dy) * mpu;
+    var best = null;
+    (ctx.entrances || []).forEach(function (en) {
+      var d = dist(pos, en) * mpu;
+      if (!best || d < best.meters) { best = { id: en.id, name: en.name, meters: d }; }
+    });
+    return {
+      x: pos.x, y: pos.y,
+      radius: pos.accuracy / mpu,
+      accuracyMeters: pos.accuracy,
+      inside: off === 0,
+      offMapMeters: off,
+      nearest: best
+    };
+  }
+
   return {
     MAX_SNAP: MAX_SNAP,
     search: search,
@@ -377,6 +503,9 @@
     shortest: shortest,
     routeTo: routeTo,
     nearest: nearest,
-    describe: describe
+    describe: describe,
+    fitGeo: fitGeo,
+    createSmoother: createSmoother,
+    describeFix: describeFix
   };
 });

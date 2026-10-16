@@ -31,6 +31,16 @@ window.LEVELS = [
 // to the east doors (about 1265 map units), and set feetPerUnit to real feet divided by 1265.
 window.SCALE = {"feetPerUnit": 0.28, "guess": true};
 
+// Ties the floor plan to real GPS positions so the blue dot ("Locate me") can be drawn.
+// Each control point says: this spot on the plan (x, y in map units) is at this latitude and longitude.
+// Use 3 or 4 points that are far apart (opposite corners of the building) and read their lat/lng from a
+// satellite map (on Google Maps, right-click the building corner and click the numbers to copy them).
+// The x and y are the corner coordinates already in OUTLINES above. Example:
+//   {"label": "South wing, west end", "x": 61, "y": 364, "lat": 42.0000, "lng": -71.0000}
+// Run `node tests.js` afterwards: it checks the fit and flags a point that is probably a typo.
+// Until at least 2 points are here the page says the map is not calibrated yet.
+window.GEO = {"points": []};
+
 // Outside walls of each wing, traced clockwise. The bridge outline is listed before the wings
 // so the wing walls are drawn on top where they meet.
 window.OUTLINES = [

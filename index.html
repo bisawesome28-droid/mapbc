@@ -190,7 +190,9 @@ dd.none{color:var(--muted)}
 .netkey.on{display:flex}
 .netkey i{display:inline-block;width:20px;height:0;border-top:3px solid var(--muted);vertical-align:middle;margin-right:6px}
 .netkey i.g{border-top:3px dashed #e28a1c}
-.floors{position:absolute;top:154px;right:12px;display:flex;flex-direction:column;overflow:hidden}
+.zoom button .ico{width:20px;height:20px}
+.zoom #locate[aria-pressed=true]{background:var(--route);color:#fff}
+.floors{position:absolute;top:196px;right:12px;display:flex;flex-direction:column;overflow:hidden}
 .floors button{width:40px;height:38px;border:0;background:transparent;font-size:15px;font-weight:800;color:var(--muted)}
 .floors button + button{border-top:1px solid var(--line)}
 .floors button:hover{background:var(--surface2);color:var(--fg)}
@@ -314,7 +316,18 @@ dd.none{color:var(--muted)}
 .net-node.guess{fill:#e28a1c}
 .net-attach{stroke:var(--muted);stroke-width:calc(var(--u,1) * 1.2);stroke-dasharray:calc(var(--u,1) * 2) calc(var(--u,1) * 2)}
 .net-door{fill:var(--surface);stroke:var(--muted);stroke-width:calc(var(--u,1) * 1.5)}
-#layer-net,#layer-route{pointer-events:none}
+#layer-net,#layer-route,#layer-you{pointer-events:none}
+
+/* Blue dot: the ring is the real GPS error in map units, the dot stays the same size on screen. */
+.you-acc{fill:var(--route);fill-opacity:.14;stroke:var(--route);stroke-opacity:.4;stroke-width:calc(var(--u,1) * 1.2)}
+.you-ring{fill:var(--route);opacity:.3;transform-box:fill-box;transform-origin:center;animation:ping2 2s ease-out infinite}
+.you-dot{fill:var(--route);stroke:#fff;stroke-width:3;filter:drop-shadow(0 1px 3px rgba(0,0,0,.4))}
+@media (prefers-reduced-motion:reduce){.you-ring{animation:none;display:none}}
+.locbar{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--route-soft);font-size:13.5px}
+.locbar[hidden]{display:none}
+.locbar.warn{background:var(--warn-soft);color:var(--warn)}
+.locbar .msg{flex:1 1 200px}
+.locbar .btn{padding:4px 11px;font-size:13px}
 </style>
 </head>
 <body>
@@ -346,6 +359,7 @@ dd.none{color:var(--muted)}
       </div>
       <div class="results" id="results" role="listbox" aria-label="Search results" aria-live="polite"></div>
       <div class="quick" id="quick"><span>Nearest</span></div>
+      <div class="locbar" id="locbar" hidden aria-live="polite"></div>
       <label class="switch">
         <input type="checkbox" id="accessible">
         <span class="track"></span>
@@ -367,6 +381,7 @@ dd.none{color:var(--muted)}
         <div class="glass netkey" id="netkey"><span><i></i>Traced</span><span><i class="g"></i>Guessed</span></div>
       </div>
       <div class="zoom glass">
+        <button id="locate" type="button" aria-pressed="false" aria-label="Show my location" title="Show my location"><span class="ico" id="locico"></span></button>
         <button id="zin" aria-label="Zoom in">+</button>
         <button id="zout" aria-label="Zoom out">&minus;</button>
         <button id="zreset" class="all" aria-label="Show the whole floor">All</button>
@@ -418,7 +433,8 @@ dd.none{color:var(--muted)}
     pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.800 12 21 12 21z"/><circle cx="12" cy="9.500" r="2.500"/>',
     moon: '<path d="M20.500 14.500A8.500 8.500 0 0 1 9.500 3.500a8.500 8.500 0 1 0 11 11z"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/>',
-    chev: '<path d="m6 9 6 6 6-6"/>'
+    chev: '<path d="m6 9 6 6 6-6"/>',
+    crosshair: '<circle cx="12" cy="12" r="3.500"/><path d="M12 2.500v4M12 17.500v4M2.500 12h4M17.500 12h4"/>'
   };
   function icon(name, cls) {
     var s = document.createElement('span');
@@ -433,7 +449,10 @@ dd.none{color:var(--muted)}
   var sel = null, hidden = {}, query = '', moved = false, from = '', accessible = false;
   var route = null, dirs = null, viaQuick = '', active = -1, shown = [];
   var roomEls = {}, spotEls = {}, entrEls = {};
-  var layerNet, layerRoute;
+  var layerNet, layerRoute, layerYou;
+  var you = null, locOn = false, watchId = null, smoother = null, locNote = null, centered = false;
+  var geo = ML.fitGeo((window.GEO || {}).points);
+  var SIM = readUrl().sim === '1'; // ?sim=1: tap the map to place a pretend location (no GPS needed)
   var view = { cx: FULL.x + FULL.w / 2, cy: FULL.y + FULL.h / 2, w: FULL.w };
   var anim = 0;
 
@@ -464,7 +483,7 @@ dd.none{color:var(--muted)}
   // ---------- Header ----------
   $('title').textContent = B.name;
   $('level').textContent = B.level;
-  fillIcon('logoico', 'pin'); fillIcon('chev', 'chev');
+  fillIcon('logoico', 'pin'); fillIcon('chev', 'chev'); fillIcon('locico', 'crosshair');
 
   // ---------- Map drawing ----------
   // The plan is drawn like an architect's floor plan: outside walls with buttresses, rooms with
@@ -707,6 +726,8 @@ dd.none{color:var(--muted)}
       el('title', {}, g).textContent = 'Entrance: ' + en.name + (en.guess ? ' (position not checked on site yet)' : '');
       entrEls[en.id] = g;
     });
+
+    layerYou = el('g', { id: 'layer-you', 'aria-hidden': 'true' }, svg); // on top of everything
   }
 
   // Draws the hallway lines of the floor on screen. Stairs and elevators that lead to another
@@ -844,7 +865,7 @@ dd.none{color:var(--muted)}
     svg.querySelectorAll('.lvl').forEach(function (g) { g.style.display = g.getAttribute('data-level') === id ? '' : 'none'; });
     $('level').textContent = levelName(id);
     $('floors').querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-level') === id ? 'true' : 'false'); });
-    drawRoute(); drawNetwork(); renderBanner();
+    drawRoute(); drawNetwork(); renderBanner(); drawYou();
   }
   function goLevel(id) { showLevel(id); frame(); }
 
@@ -871,6 +892,130 @@ dd.none{color:var(--muted)}
       ]));
     }
     bar.style.display = bar.childNodes.length ? '' : 'none';
+  }
+
+  // ---------- Your location (blue dot) ----------
+  // The phone gives latitude and longitude. geo (fitted from GEO.points in data.js) turns that into a
+  // spot on the plan. GPS only knows where you are on the ground, not which floor, so the dot shows on
+  // Level 1 only for now. Nothing is stored or sent anywhere: the position stays in this page.
+  function metersPerUnit() { return geo ? 1 / geo.unitsPerMeter : SCALE.feetPerUnit * 0.3048; }
+  function planBounds() {
+    var pts = [];
+    OUTLINES.forEach(function (o) { if (lv(o) === '1') { pts = pts.concat(o.points); } });
+    return boxOf(pts);
+  }
+  function feetText(m) {
+    var ft = m * 3.28084;
+    if (ft >= 1000) { return (ft / 5280).toFixed(1) + ' mi'; }
+    return (ft < 50 ? Math.max(5, Math.round(ft / 5) * 5) : Math.round(ft / 10) * 10) + ' ft';
+  }
+
+  function drawYou() {
+    layerYou.textContent = '';
+    if (!you || !you.inside || you.level !== curLevel) { return; }
+    var g = el('g', { transform: 'translate(' + you.x + ' ' + you.y + ')' }, layerYou);
+    el('circle', { 'class': 'you-acc', cx: 0, cy: 0, r: Math.min(you.radius, 600) }, g);
+    var mk = el('g', { 'class': 'mk' }, g);
+    el('circle', { 'class': 'you-ring', cx: 0, cy: 0, r: 9 }, mk);
+    el('circle', { 'class': 'you-dot', cx: 0, cy: 0, r: 7.5 }, mk);
+  }
+
+  function setLocBtn() { $('locate').setAttribute('aria-pressed', locOn ? 'true' : 'false'); }
+
+  function renderLoc() {
+    var bar = $('locbar');
+    bar.textContent = '';
+    bar.className = 'locbar';
+    var text = '', actions = [];
+    if (locNote) {
+      text = locNote.text;
+      if (locNote.kind === 'warn') { bar.className = 'locbar warn'; }
+    } else if (you) {
+      var near = you.nearest && you.nearest.meters <= 250 ? you.nearest : null;
+      text = you.inside ? 'You are on the plan' + (SIM ? ' (test location).' : ', within about ' + feetText(you.accuracyMeters) + '.')
+                        : 'You are about ' + feetText(you.offMapMeters) + ' from Stokes Hall.';
+      if (near) {
+        text += ' Nearest entrance: ' + near.name + ' (' + feetText(near.meters) + ').';
+        if (from !== near.id) {
+          var use = h('button', { 'class': 'btn', type: 'button', text: 'Start there' });
+          use.addEventListener('click', function () { setFrom(near.id); });
+          actions.push(use);
+        }
+      }
+    } else { bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.appendChild(h('span', { 'class': 'msg', text: text }));
+    actions.forEach(function (a) { bar.appendChild(a); });
+    if (locOn || you) {
+      var stop = h('button', { 'class': 'btn', type: 'button', text: 'Hide' });
+      stop.addEventListener('click', function () { stopLocate(true); });
+      bar.appendChild(stop);
+    }
+  }
+
+  function setYou(pos) {
+    you = ML.describeFix(pos, { metersPerUnit: metersPerUnit(), bounds: planBounds(), entrances: ENTRANCES });
+    you.level = '1';
+    locNote = null;
+    drawYou(); renderLoc();
+    // First good fix: show the dot (not every fix, or the map would fight your fingers).
+    if (you.inside && !centered && !SIM) {
+      centered = true;
+      if (curLevel !== '1') { showLevel('1'); }
+      goTo({ cx: you.x, cy: you.y, w: 900 }, true);
+    }
+  }
+
+  function onFix(p) {
+    var c = p.coords, m = geo.toMap(c.latitude, c.longitude);
+    // Treat a missing accuracy as poor, and never trust a reading to be better than 3 m.
+    var accU = Math.max(c.accuracy || 25, 3) * geo.unitsPerMeter;
+    var s = smoother.update(m.x, m.y, accU, p.timestamp || Date.now());
+    setYou({ x: s.x, y: s.y, accuracy: s.acc / geo.unitsPerMeter });
+  }
+
+  function onLocError(err) {
+    var text = 'Your location is not available right now.';
+    if (err.code === 1) {
+      text = window.isSecureContext === false
+        ? 'Location only works on secure (https) pages. Open the map from an https link.'
+        : 'Location is blocked for this page. Allow it in your browser settings, then try again.';
+      stopLocate(false);
+    } else if (err.code === 3) { text = 'Still looking for a GPS signal. It is faster outside.'; }
+    locNote = { kind: 'warn', text: text };
+    renderLoc();
+  }
+
+  function stopLocate(clear) {
+    if (watchId != null && navigator.geolocation) { navigator.geolocation.clearWatch(watchId); }
+    watchId = null; locOn = false;
+    if (clear) { you = null; locNote = null; if (smoother) { smoother.reset(); } }
+    setLocBtn(); drawYou(); renderLoc();
+  }
+
+  function toggleLocate() {
+    if (locOn) { stopLocate(!SIM); return; }
+    if (SIM) {
+      locOn = true; setLocBtn();
+      locNote = you ? null : { kind: 'info', text: 'Test mode: tap the map to place a pretend location.' };
+      renderLoc();
+      return;
+    }
+    if (!geo) {
+      locNote = { kind: 'warn', text: 'The map is not tied to real GPS positions yet, so it cannot place a blue dot. Add control points to GEO in data.js (see HANDOFF.md). To try the dot now, open this page with ?sim=1 on the end of the link.' };
+      renderLoc();
+      return;
+    }
+    if (!navigator.geolocation) {
+      locNote = { kind: 'warn', text: 'This browser cannot share a location.' };
+      renderLoc();
+      return;
+    }
+    locOn = true; centered = false; you = null;
+    smoother = ML.createSmoother({ speed: 1.4 * geo.unitsPerMeter }); // walking pace, in map units per second
+    locNote = { kind: 'info', text: 'Finding your location...' };
+    setLocBtn(); renderLoc();
+    watchId = navigator.geolocation.watchPosition(onFix, onLocError, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
   }
 
   // ---------- Search ----------
@@ -1089,7 +1234,7 @@ dd.none{color:var(--muted)}
       var target = route ? route.levels[0] : (sel ? lv(sel.o) : (from ? lv(entranceById(from)) : curLevel));
       showLevel(target);
     } else { drawRoute(); renderBanner(); }
-    renderRouteCard(); renderDetail(); renderPhoto();
+    renderRouteCard(); renderDetail(); renderPhoto(); renderLoc();
     refreshStyles(); renderResults();
     saveUrl();
     if (reframe) { frame(); }
@@ -1184,6 +1329,8 @@ dd.none{color:var(--muted)}
       else if (e.key === 'Escape') { query = ''; input.value = sel ? titleOf(sel) : ''; update(false); input.blur(); }
     });
 
+    $('locate').addEventListener('click', toggleLocate);
+    if (SIM) { $('locate').title = 'Test mode: place a pretend location'; }
     $('zin').addEventListener('click', function () { zoomBy(0.7); });
     $('zout').addEventListener('click', function () { zoomBy(1.4); });
     $('zreset').addEventListener('click', function () { showAll(true); });
@@ -1262,6 +1409,8 @@ dd.none{color:var(--muted)}
   function act(m) { if (m.kind === 'entrance') { setFrom(m.id); } else { choose(m); } }
   svg.addEventListener('click', function (e) {
     if (moved) { moved = false; return; }
+    // Test mode: while the locate button is on, a tap places the pretend location instead of selecting.
+    if (SIM && locOn) { var w = toWorld(e.clientX, e.clientY); setYou({ x: w.x, y: w.y, accuracy: 8 }); return; }
     var m = pick(e.target);
     if (m) { act(m); }
   });
