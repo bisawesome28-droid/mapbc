@@ -1,0 +1,5 @@
+{
+  "about": ["Schools this map knows. The page opens \"default\" unless the link says ?school=<id>."],
+  "default": "bc",
+  "schools": [{"id": "bc", "name": "Boston College", "folder": "bc"}]
+}

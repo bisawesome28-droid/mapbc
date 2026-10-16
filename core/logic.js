@@ -1,13 +1,13 @@
 // Search and route-finding for the map.
-// This file has no drawing code, so the page (index.html) and the tests (tests.js) share it.
-// In the browser it becomes window.MapLogic. In Node it is loaded with require('./logic.js').
+// This file has no drawing code, so the web page (web/app.js), the tests (tests.js) and a future native app share it.
+// In the browser it becomes window.MapLogic. In Node it is loaded with require('./core/logic.js').
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   else { root.MapLogic = api; }
 })(this, function () {
 
-  // Distances below are in map units. The map is about 2300 units wide (brochure pixels).
+  // Distances below are in plan units (each building has its own; Stokes's plan is about 2300 units wide, ~20 per metre).
   // A door further than this from every hallway line is treated as a data mistake.
   var MAX_SNAP = 100;
 
@@ -34,11 +34,12 @@
   }
 
   function hay(o, kind) {
+    var b = o.building ? [o.building.name, o.building.short].join(' ') : '';
     if (kind === 'room') {
-      return [o.id, o.door, o.name, TYPE_WORDS[o.type] || '', o.wing, o.keywords, o.near]
+      return [o.id, o.door, o.name, TYPE_WORDS[o.type] || '', o.wing, o.keywords, o.near, b]
         .join(' ').toLowerCase();
     }
-    return [o.id, o.label, o.keywords].join(' ').toLowerCase();
+    return [o.id, o.label, o.keywords, b].join(' ').toLowerCase();
   }
 
   // Lower score = better match. An exact room number beats a partial one,
@@ -98,7 +99,9 @@
   // Returns { nodes, adj, problems, attach } where problems lists data mistakes.
   // Each level is its own floor: a door only joins hallways on its own level, and the
   // levels are linked only by "stair" and "elevator" edges.
-  function buildGraph(paths, rooms, entrances, spots) {
+  // opts.maxSnap: the distance limit above in this building's plan units (default MAX_SNAP).
+  function buildGraph(paths, rooms, entrances, spots, opts) {
+    var maxSnap = (opts && opts.maxSnap) || MAX_SNAP;
     var nodes = {}, adj = {}, problems = [];
     var attach = []; // for drawing: [{ from: {x,y}, to: {x,y}, d }]
 
@@ -156,8 +159,8 @@
       });
       addNode({ id: p.id, x: p.x, y: p.y, name: p.name, kind: 'point', level: p.level });
       if (!best) { problems.push(p.id + ' has no hallway to connect to'); return; }
-      if (best.pr.d > MAX_SNAP) {
-        problems.push(p.id + ' is ' + Math.round(best.pr.d) + ' units from the nearest hallway (limit ' + MAX_SNAP + ')');
+      if (best.pr.d > maxSnap) {
+        problems.push(p.id + ' is ' + Math.round(best.pr.d) + ' units from the nearest hallway (limit ' + Math.round(maxSnap) + ')');
       }
       best.e.stops.push({ t: best.pr.t, x: best.pr.x, y: best.pr.y, point: p.id, d: best.pr.d });
       attach.push({ from: { x: p.x, y: p.y }, to: { x: best.pr.x, y: best.pr.y }, d: best.pr.d, level: p.level });
@@ -290,8 +293,9 @@
   // ---------- Turn-by-turn directions ----------
 
   var TURN_MIN = 30;       // a bend smaller than this many degrees counts as "straight on"
-  var SHORT_LEG = 22;      // a jog shorter than this (map units) is folded into the leg before it
-  var STUB = 55;           // a first leg this short (a few steps from a door) absorbs a gentle bend
+  var SHORT_LEG_U = 22;    // a jog shorter than this (Stokes plan units, about 1 m) is folded into the leg before it
+  var STUB_U = 55;         // a first leg this short (a few steps from a door, about 2.7 m) absorbs a gentle bend
+  var STOKES_UNITS_PER_METER = 20.58; // the two lengths above are scaled to other buildings with opts.unitsPerMeter
   var FEET_PER_MINUTE = 240; // an easy indoor walking pace, about 2.7 mph
   var MINUTES_PER = { elevator: 0.75, stair: 0.4 }; // waiting for an elevator, climbing one flight
 
@@ -313,10 +317,13 @@
   // targetName: what the last step should say you are walking to.
   // opts.feetPerUnit: map units to feet (data.js SCALE).
   // opts.levelNames: { "2": "Level 2" } for the "Take the elevator up to ..." steps.
-  // opts.fallbackName: what to say when a point has no name (outdoors: "the path"). Returns
+  // opts.fallbackName: what to say when a point has no name (outdoors: "the path").
+  // opts.unitsPerMeter: plan units in one metre (so short jogs are judged in real lengths). Returns
   // { steps: [{ kind, turn, text, feet, level }], feet, minutes }.
   function describe(graph, route, targetName, opts) {
     var fpu = (opts && opts.feetPerUnit) || 1;
+    var k = opts && opts.unitsPerMeter ? opts.unitsPerMeter / STOKES_UNITS_PER_METER : 1;
+    var SHORT_LEG = SHORT_LEG_U * k, STUB = STUB_U * k;
     var nodes = route.ids.map(function (id) { return graph.nodes[id]; });
     var legs = [];
     for (var i = 1; i < nodes.length; i++) {

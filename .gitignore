@@ -9,3 +9,9 @@ campus/osm_export.geojson
 # Photos of the fire department plans posted in Stokes (room numbers came from them). Keep locally.
 *.HEIC
 *.heic
+
+# Raw OpenStreetMap downloads per school (tools/fetch_osm.py). campus/data.json and base.json are made from them.
+schools/*/campus/osm_export.geojson
+# Photos of posted floor plans used for tracing (any building). Keep locally.
+*.HEIC
+*.heic
