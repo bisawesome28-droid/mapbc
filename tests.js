@@ -68,6 +68,19 @@ test('exact room number is listed before a longer one ("S19" before "S195")', fu
 
 // ---------- Path network data ----------
 
+test('real room numbers from the posted fire plans: no duplicates, searchable', function () {
+  var seen = {};
+  D.ROOMS.forEach(function (r) {
+    if (!r.door) { return; }
+    assert.ok(/^[SN]\d{3}[a-z]?$/.test(r.door), r.id + ' has an odd room number: ' + r.door);
+    assert.ok(r.door.charAt(0) === r.wing.charAt(0), r.id + ' number ' + r.door + ' is in the ' + r.wing + ' wing');
+    assert.ok(!seen[r.door], r.door + ' is used twice (' + seen[r.door] + ' and ' + r.id + ')');
+    seen[r.door] = r.id;
+  });
+  assert.strictEqual(ids(ML.search('S195', D.ROOMS, []))[0], 'S11', 'S195 is the big tiered classroom');
+  assert.strictEqual(ids(ML.search('n131', D.ROOMS, []))[0], 'N06');
+});
+
 test('path network has no data mistakes (missing nodes, far-away doors)', function () {
   assert.deepStrictEqual(graph.problems, []);
 });
