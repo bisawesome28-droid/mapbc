@@ -139,7 +139,9 @@ Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons nee
   **Straightening pass (map version p):** the Level 2 and 3 photos were taken at a slant, so a first pass came out curvy. They were
   re-lined up with Level 4 (a full perspective fit, not just shift and scale), then every wall and room was forced to run only
   horizontal or vertical, and walls that were nearly in line were snapped exactly in line. The outside walls of Level 3 and of the
-  Level 2 north wing reuse Level 4's (same building). A test (`Level 2 and 3 walls and rooms are straight`) fails if a slanted wall sneaks back in.
+  Level 2 north wing reuse Level 4's (same building). **Second pass (version q), Levels 2, 3 and 4:** every room is now a clean
+  rectangle (its main body, without door-swing bumps), rooms are snapped into shared rows and columns, neighbours share one wall,
+  rooms next to the outside wall sit against it, and doors are kept away from room corners. Small rooms get smaller door symbols. A test (`Level 2 and 3 walls and rooms are straight`) fails if a slanted wall sneaks back in.
   **S290 (Level 2):** the fire plan shows ENTRY S290 on Level 2 of the south wing, which is raised, so it is not a room. It is the
   entrance `E-S-290` (`"level": "2"`, `"outdoor": true`): a gap in the Level 2 outside wall, in the "Starting from" list, and used by
   walking directions from outside (`groundEntrances()` in index.html includes entrances marked `outdoor`). Door spot is a guess.
