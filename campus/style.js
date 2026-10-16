@@ -14,7 +14,7 @@ window.CAMPUS_STYLE = (function () {
       grass: '#d4eac3', wood: '#c3dfb0', pitch: '#c6e6b0', pitchEdge: '#a9d48f', parking: '#e5e7ec', plaza: '#ebe9e4', water: '#a7d0ee',
       roadCasing: '#d3d6dc', road: '#ffffff', major: '#fff4cf', majorCasing: '#e3cf91', path: '#ffffff', pathCasing: '#dcd9d2', steps: '#c9a98a', rail: '#9aa1ad',
       tree: '#9ccc83', treeEdge: '#86b96c',
-      building: '#d9dde7', buildingTop: '#e4e8f0', house: '#e6e2db', stokes: '#7d1a2a', selected: '#5b8def',
+      building: '#dcd5ca', buildingTop: '#f4f1ec', house: '#e7e2da', houseTop: '#f1eeea', edge: '#b9b0a2', stokes: '#7d1a2a', selected: '#5b8def', selectedTop: '#8fb0f5',
       label: '#353d4b', labelSoft: '#6a7282', labelGreen: '#4c7a37', halo: '#ffffff', stokesLabel: '#7d1b2b'
     },
     dark: {
@@ -22,7 +22,7 @@ window.CAMPUS_STYLE = (function () {
       grass: '#1f3326', wood: '#1d3324', pitch: '#22402b', pitchEdge: '#2d5236', parking: '#232937', plaza: '#212634', water: '#16304a',
       roadCasing: '#11151d', road: '#2f3647', major: '#4a4434', majorCasing: '#11151d', path: '#343b4d', pathCasing: '#151a24', steps: '#7a6150', rail: '#566074',
       tree: '#2b4a33', treeEdge: '#355c3e',
-      building: '#323b52', buildingTop: '#3a4560', house: '#2c3140', stokes: '#8a2737', selected: '#4d7fe0',
+      building: '#343c52', buildingTop: '#4b5772', house: '#2c3140', houseTop: '#394055', edge: '#1a1f2c', stokes: '#8a2737', selected: '#4d7fe0', selectedTop: '#6f98e8',
       label: '#d7deeb', labelSoft: '#9aa4b8', labelGreen: '#8fbf7a', halo: '#121620', stokesLabel: '#f0b5bf'
     }
   };
@@ -73,12 +73,18 @@ window.CAMPUS_STYLE = (function () {
   // Above the route: buildings in 3D (height in metres from base.js), then the names.
   function top(c) {
     return [
+      // Each building is a wall block plus a thin lighter roof slab on top, so the roof edge reads clearly.
       { id: 'houses-3d', type: 'fill-extrusion', source: 'b-houses', minzoom: 14.5,
-        paint: { 'fill-extrusion-color': c.house, 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-opacity': 0.9, 'fill-extrusion-vertical-gradient': true } },
+        paint: { 'fill-extrusion-color': c.house, 'fill-extrusion-height': ['-', ['get', 'h'], 0.6], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true } },
+      { id: 'houses-roof', type: 'fill-extrusion', source: 'b-houses', minzoom: 14.5,
+        paint: { 'fill-extrusion-color': c.houseTop, 'fill-extrusion-base': ['-', ['get', 'h'], 0.6], 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': false } },
+      { id: 'buildings-edge', type: 'line', source: 'buildings', filter: notStokes, paint: { 'line-color': c.edge, 'line-width': Z([15, 0.5, 19, 2]), 'line-opacity': 0.8 } },
       { id: 'buildings-3d', type: 'fill-extrusion', source: 'buildings', filter: notStokes,
-        paint: { 'fill-extrusion-color': c.building, 'fill-extrusion-height': ['coalesce', ['get', 'h'], 15], 'fill-extrusion-opacity': 0.95, 'fill-extrusion-vertical-gradient': true } },
+        paint: { 'fill-extrusion-color': c.building, 'fill-extrusion-height': ['-', ['coalesce', ['get', 'h'], 15], 0.8], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true } },
+      { id: 'buildings-roof', type: 'fill-extrusion', source: 'buildings', filter: notStokes,
+        paint: { 'fill-extrusion-color': c.buildingTop, 'fill-extrusion-base': ['-', ['coalesce', ['get', 'h'], 15], 0.8], 'fill-extrusion-height': ['coalesce', ['get', 'h'], 15], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': false } },
       { id: 'stokes-3d', type: 'fill-extrusion', source: 'foot',
-        paint: { 'fill-extrusion-color': c.stokes, 'fill-extrusion-height': ['coalesce', ['get', 'h'], 20], 'fill-extrusion-opacity': 0.9, 'fill-extrusion-vertical-gradient': true } },
+        paint: { 'fill-extrusion-color': c.stokes, 'fill-extrusion-height': ['coalesce', ['get', 'h'], 20], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true } },
       { id: 'road-names', type: 'symbol', source: 'b-lines', minzoom: 15.5, filter: ['all', ['has', 'name'], ['in', ['get', 'class'], ['literal', ['major', 'minor', 'service']]]],
         layout: { 'symbol-placement': 'line', 'text-field': ['get', 'name'], 'text-font': ['Inter Regular'], 'text-size': Z([15.5, 10, 19, 13]), 'text-max-angle': 30, 'symbol-spacing': 320 },
         paint: { 'text-color': c.labelSoft, 'text-halo-color': c.halo, 'text-halo-width': 1.4 } },
@@ -96,6 +102,8 @@ window.CAMPUS_STYLE = (function () {
 
   return {
     palettes: PALETTES,
+    // Sun: from the south-west, fairly low, so walls facing different ways get different shades.
+    light: { light: { anchor: 'map', position: [1.4, 215, 38], intensity: 0.5, color: '#fff6e8' }, dark: { anchor: 'map', position: [1.4, 215, 38], intensity: 0.35, color: '#b9c6ff' } },
     ground: ground,
     top: top,
     // The font names the layers use, and the font weight/style each one is (see the @font-face rules in index.html).
