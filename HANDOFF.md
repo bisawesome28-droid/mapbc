@@ -1,16 +1,77 @@
 # BC Campus Map: handoff notes
 
+## Read this first: how the map fits together (Oct 16, 2026)
+`index.html` is now **one map**: the outdoor campus map (MapLibre + OpenStreetMap) with the Stokes Hall floor plan laid
+exactly on top of the real building. Zoomed out you see campus and Stokes as a maroon shape; zoom in and the floor plan appears,
+with rooms, doors, floors, search and routes as before. `node tests.js` should say 60 passed, 0 failed.
+
+### Who and why
+Brandon (BC student) and a friend are building a campus map app. The goal: a big outdoor campus map, tap into a building to see its
+indoor floor plans, accurate names, search, routing, and eventually which floor you are on. They want it to scale to other colleges
+and plan to pitch schools to supply their own floor plans. Stokes Hall Level 1 is the proof of concept. They plan a real app later
+(a website is fine for now). Indoor content is a basic layout (room numbers, stairs, elevators, accessibility), no emergency content.
+
+### How Stokes is placed on the real map
+- The floor plan is a picture: `data.js` x/y are pixel positions on the brochure image (2722 x 1812), not GPS.
+- `window.GEO.points` in data.js are 4 corners with both plan x/y and real lat/lng. `ML.fitGeo` turns them into a move + turn + resize
+  (`toGeo(x, y)` and `toMap(lat, lng)`).
+- **Where the 4 corners came from:** the traced Level 1 outline was fitted onto OpenStreetMap's footprints of "Stokes Hall North" and
+  "Stokes Hall South" (from map tiles), maximising the overlap. They overlap by 91%, and the bumps line up. Real north is about 105 degrees
+  from the brochure's "up": the brochure's right side is real north (Stokes North is north of Stokes South).
+  To redo it: `python3 tools/fit_plan_to_osm.py --center 42.33426,-71.171274 --seed 42.334597,-71.171139 --seed 42.333923,-71.171349`.
+- That fit also gave the real scale: **0.159 ft per plan unit** (the old guess of 0.28 was 75% too long). `SCALE` in data.js now uses it.
+- Accuracy: about as good as OpenStreetMap's footprint (usually 1 to 3 m). Check by standing at a corner with the blue dot on.
+
+### How the page works
+- MapLibre (stored in `vendor/maplibre-gl-5.24.0/`, so nothing loads from a CDN) owns the camera: drag, pinch, scroll.
+- The floor plan is still the same SVG drawing. It sits inside the map and is moved with one CSS transform on every map move
+  (`applyView` in index.html). Labels and markers undo the building's turn so they stay upright, and keep a steady size on screen.
+- Taps go through the map's own click event (`onMapClick`), which only fires when the map was not dragged.
+- Version 5 of MapLibre is used on purpose: version 6 only ships as ES modules, which browsers refuse to load from a file opened straight from disk.
+- The base map is OpenStreetMap's own tiles (`CAMPUS.basemap = "osm-dev"`): fine for testing, not for launch (their policy is light use).
+  Without internet the base map is blank but the floor plan, search and routes still work.
+
+### Campus data and outdoor routes
+- `campus/data.js` holds campus buildings, walking paths and entrances (GeoJSON, **[lng, lat]** order). **It is still empty.**
+  It is a .js file (not .geojson) so the page works from disk. `tools/osm_to_campus.js` writes it from an OpenStreetMap export (`campus/README.md`).
+- "Starting from" has **My location (GPS)**. The route goes outdoors to the best door, then inside (`ML.campusRoute`): it tries every
+  ground-floor entrance and keeps the shortest total walk. The step-free option avoids outdoor "steps" paths and paths tagged wheelchair=no.
+- **Until walkways are loaded, the outdoor part is a straight dashed line**, and the page says so. Once `campus/data.js` has paths,
+  the same code follows them with turn-by-turn steps.
+- Inside the building, GPS is too rough, so "My location" starts from the nearest door instead.
+- **Why the data is not loaded yet:** this cloud session cannot reach OpenStreetMap's data servers (overpass-api.de resets the connection,
+  api.openstreetmap.org is not in the allowed domains). Either add `api.openstreetmap.org` to the environment's allowed domains, or run the
+  export in a browser (campus/README.md, step 1) and commit the result.
+
+### Floor detection (discussed, not built)
+Plan: barometer for relative floor change, reset at entrances that have a known floor (BC buildings can have entrances on different levels,
+so tag the floor per entrance), use the accelerometer to confirm stairs or an elevator ride, and ask the user to confirm when unsure.
+Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons need hardware, which hurts the scale-to-any-college goal.
+
+### Gotchas
+- `tests.js` creates a fake `window` and `require`s `data.js`, `campus/config.js` and `campus/data.js`. New data files should write to `window.*`
+  the same way, and `logic.js` has no DOM code, so keep it that way.
+- Lat/lng order differs between tools: GeoJSON and MapLibre use [lng, lat], Google Maps shows lat, lng, and `GEO.points` uses named `lat` and `lng`.
+- Re-running the importer overwrites campus/data.js, so hand edits should come after the import is final.
+- The brochure image is not in the repo on purpose (see "Current state").
+- `window.mapbcMap` is the MapLibre map, for testing and the browser console.
+- `?sim=1` on the link: press the locate button, then tap anywhere to place a pretend location (for testing at a desk).
+
 ## What's here
-- index.html: the map page, drawn like an architect's floor plan (walls, doors, stairs, seating). Open it in a browser. No server or build step needed.
+- index.html: the main page. The campus map with the Stokes floor plan on it, drawn like an architect's plan (walls, doors, stairs, seating). Open it in a browser. No server or build step needed.
 - data.js: everything the map shows (rooms, doors, entrances, hallway network). Most changes happen here.
 - logic.js: search and route finding. Shared by the page and the tests.
 - tests.js: run `node tests.js` to check search and routing. Run it after every data.js edit.
 - rooms.csv: spreadsheet template for real room data (door numbers, landmarks, verified flag).
 - pipeline_prototype/: optional prototype that finds rooms in a color-coded floor plan image.
+- campus/: campus settings (config.js) and campus data (data.js, empty until imported). tools/osm_to_campus.js imports OpenStreetMap data.
+- tools/fit_plan_to_osm.py: places a traced floor plan on the real map by fitting its outline onto OpenStreetMap's footprint (prints GEO points). Used for Stokes; use it for each new building.
+- vendor/: the MapLibre map library (version 5.24.0, BSD license), stored here so the page needs no CDN.
+- campus.html: just sends old links to index.html.
 
 ## What works now
 - Search a room (placeholder id, real room number, or words like "restrooms"). It highlights and zooms in.
-- "I'm entering from..." picks an entrance. Entrances are the green IN markers. Tapping one picks it too.
+- "Starting from" picks an entrance (the green markers; tapping one picks it too) or My location (GPS).
 - With a room and an entrance chosen, the map draws the shortest route and lists the steps.
 - "Accessible route" skips anything marked as steps or stairs. Level 1 has none marked yet, so for now it gives the same route.
 - "Show path network" draws every hallway line. Orange dashes = guessed, grey = clear on the brochure.
@@ -28,27 +89,13 @@
 - All door positions are guesses. Hallways marked "guess": true need checking on site.
 
 ## GPS blue dot ("Locate me")
-The crosshair button above the zoom buttons shows where you are on the plan, with a ring for how far off the GPS might be.
-- It asks the phone for its position, turns latitude/longitude into a map spot, smooths out the jumps, and draws the dot.
-- It also names the nearest entrance and offers a "Start there" button that sets "I'm entering from".
-- Outside the plan it says how far away you are instead. The plan only covers Stokes, so there is no outdoor map to draw the dot on yet.
-- GPS cannot tell floors apart, so the dot shows on Level 1 only. Floor detection (barometer) is a separate step.
-- Nothing is saved or sent anywhere. Location only works on an https page (or localhost), not when the file is opened straight from disk.
-
-**It needs calibrating before it works for real.** `window.GEO` in data.js is empty. Add 3 or 4 control points: spots on the plan whose
-real latitude/longitude you look up on a satellite map (Google Maps: right-click the building corner, click the numbers to copy).
-Pick corners far apart. These outside-wall corners from OUTLINES work well:
-- South wing, west end: x 61, y 364
-- South wing, north bump: x 1207, y 118
-- North wing, north-east corner: x 2280, y 680
-- North wing, south end: x 1975, y 1750
-
-Then add them like this, and run `node tests.js`. It reports how far the points miss on average and which one is probably a typo:
-`{"label": "South wing, west end", "x": 61, "y": 364, "lat": 0.0, "lng": 0.0}` (use the real numbers).
-The fitted scale also gives a real feet-per-unit. Once it looks right, compare it with SCALE (above) and fix that too.
-
-**Trying it without calibration:** open the page with `?sim=1` on the end, press the crosshair, then tap the map to place a pretend location.
-This tests the dot, the ring and the nearest-entrance prompt from a desk. Press the crosshair again to stop placing (the dot stays), or "Hide" to clear it.
+The crosshair button shows where you are, anywhere on campus, with a faint circle for how far off the GPS might be.
+- It asks the phone for its position, smooths out the jumps, and draws the dot on the map.
+- It names the nearest entrance and offers "Start there". Or choose "My location (GPS)" in "Starting from" for a route from where you stand.
+- GPS cannot tell floors apart. Inside the building it is often off by 5 to 10 m.
+- Nothing is saved or sent anywhere. Location only works on an https page (GitHub Pages is https), not from a file on disk.
+- It is calibrated (see "How Stokes is placed on the real map" above). Still to do: walk around Stokes with a phone and check the dot.
+- `node tests.js` checks the 4 GEO corners agree with each other and with SCALE, and points at a likely typo if one is off.
 
 ## Floors (levels)
 - `window.LEVELS` in data.js lists the floors. Anything without a `"level"` is on Level 1.
@@ -66,9 +113,9 @@ This tests the dot, the ring and the nearest-entrance prompt from a desk. Press 
   a "Take the elevator up to Level 2" step with a "Show Level 2" button, and a bar listing the floors used.
 
 ## Map scale (distance and time estimates)
-`window.SCALE` in data.js turns map units into feet. The value (0.28) is a guess. Measure one real hallway,
-for example the south wing main hallway (about 1265 map units from the west door to the east doors), and set
-feetPerUnit to real feet divided by 1265. Then set "guess" to false. Time assumes an easy 240 feet per minute.
+`window.SCALE` in data.js turns map units into feet: 0.1594 ft per unit, from the fit onto OpenStreetMap (about +/- 5%).
+To make it exact, measure the south wing main hallway (about 1265 map units from the west door to the east doors) and set
+feetPerUnit to real feet divided by 1265. Time assumes an easy 240 feet per minute.
 
 ## Things to check when walking the building
 1. Each room's door position. Edit that room's "doors" in data.js. Each [x, y] is one door.
@@ -86,7 +133,46 @@ feetPerUnit to real feet divided by 1265. Then set "guess" to false. Time assume
 - Turn on "Show path network" to see the result. Then run `node tests.js`. It flags typos and doors too far from any hallway.
 
 ## Next steps
-0. Calibrate GPS (see "GPS blue dot" above), then walk around outside Stokes with the page on https and check the dot lands where you stand.
+0. Load the campus walkways (campus/README.md), then walk around outside Stokes with the page on https and check the blue dot and the route in.
 1. Get real room numbers and door positions (the evacuation floor plans in the building should have them).
 2. Walk the building and fix the guesses listed above. Set "guess": false or "verified": true as you go.
 3. Test with ~5 freshmen against BC's map and log hours per building.
+
+## Project decisions and growth plan
+
+### Project status
+- Stokes Hall Level 1 is traced from the brochure as a real floor plan (walls, doors, stairs, seating).
+  Room IDs S01-S11 and N01-N08 are placeholders. Real numbers go in the "door" field using BC's format
+  (number + wing letter, like 195S).
+- Level 2 is a placeholder floor: outside walls, 5 staircases, 2 elevators, the enclosed bridge, and a
+  hallway skeleton, all guesses. Floors connect through "stair" and "elevator" edges. Step-free routes
+  use elevators only.
+- On Level 1 there is no indoor link between the wings. Routes between wings go outside on the walkway
+  (the enclosed bridge is on Level 2, according to the architect).
+- Still needed:
+  - real room numbers (from the evacuation maps posted in the building)
+  - a walk-through to check door positions and guessed hallways
+  - measuring one hallway to fix the distance scale
+  - a photo of a Level 2 floor plan
+
+### Growth plan (decided)
+- Keep building it as a plain static website on GitHub Pages for now. This scales to lots of users for free.
+- When testing with real students, turn it into an installable web app (a PWA) so it can be added to the
+  home screen and works offline.
+- Only move to the App Store / Google Play (for example by wrapping it with Capacitor) if lots of people
+  use it. Apple costs $99 a year and needs a Mac. Google costs $25 once.
+- Before adding a second building, split the data into one file per building (for example buildings/stokes.json).
+- Once there are a few buildings, build a simple click-to-edit map tool so nobody has to type coordinates by hand.
+- Talk to Boston College early (Facilities, First Year Experience, or student government) about permission
+  and official floor plans, and move away from the traced brochure. Do not use BC's name or brochure in a
+  public app store listing without permission.
+- Loosely follow a standard indoor map format (Apple's IMDF) so the data can be moved to other tools later.
+
+### How we work
+- Two people work on this repo, the owner and a friend, each with their own Claude Code sessions.
+- Each person works on their own branch and merges through pull requests. The other person reviews before merging.
+- Split the work so nobody edits the same file at the same time (especially data.js).
+- Start every session by pulling the latest main.
+- HANDOFF.md is the shared notebook: any important decision goes here so every Claude session knows it.
+- The owner is not an experienced coder. Always explain things in plain language, show a short plan before
+  big changes, and run `node tests.js` before saying something is done.

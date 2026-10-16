@@ -287,7 +287,8 @@
   // Turns a route into readable steps.
   // targetName: what the last step should say you are walking to.
   // opts.feetPerUnit: map units to feet (data.js SCALE).
-  // opts.levelNames: { "2": "Level 2" } for the "Take the elevator up to ..." steps. Returns
+  // opts.levelNames: { "2": "Level 2" } for the "Take the elevator up to ..." steps.
+  // opts.fallbackName: what to say when a point has no name (outdoors: "the path"). Returns
   // { steps: [{ kind, turn, text, feet, level }], feet, minutes }.
   function describe(graph, route, targetName, opts) {
     var fpu = (opts && opts.feetPerUnit) || 1;
@@ -355,7 +356,7 @@
       } else if (leg.outdoor) {
         text = (fresh ? 'Head' : tw.text) + ' outside along the walkway toward ' + (end.name || 'the next building');
       } else {
-        text = tw.text + ' toward ' + (end.name || 'the end of the hall');
+        text = tw.text + ' toward ' + (end.name || (opts && opts.fallbackName) || 'the end of the hall');
       }
       steps.push({
         kind: last ? 'arrive' : 'walk',
@@ -496,8 +497,84 @@
     };
   }
 
+  // ---------- Outdoors: campus walking paths ----------
+  // Outdoor data is latitude/longitude. To reuse the same route finder, it is flattened into metres
+  // around a centre point: x grows east, y grows SOUTH (the same way round as the floor plan's y).
+
+  function localFrame(lat0, lng0) {
+    var mp = metersPerDegree(lat0);
+    return {
+      toXY: function (lat, lng) { return { x: (lng - lng0) * mp.lng, y: -(lat - lat0) * mp.lat }; },
+      toLatLng: function (x, y) { return { lat: lat0 - y / mp.lat, lng: lng0 + x / mp.lng }; }
+    };
+  }
+
+  // paths: GeoJSON FeatureCollection of LineStrings (from campus/data.js). frame: from localFrame.
+  // Returns { nodes, edges } in the same shape as PATHS in data.js, so buildGraph can use it.
+  // Lines that share a point (as connected OpenStreetMap ways do) become joined at that point.
+  // "steps" paths, and paths tagged wheelchair=no, get kind "steps" so the step-free route avoids them.
+  function outdoorNetwork(paths, frame) {
+    var nodes = [], edges = [], byKey = {};
+    function nodeAt(c, name) {
+      var key = c[0].toFixed(7) + ',' + c[1].toFixed(7);
+      if (!byKey[key]) {
+        var p = frame.toXY(c[1], c[0]);
+        byKey[key] = { id: 'o' + nodes.length, x: p.x, y: p.y, name: name || '' };
+        nodes.push(byKey[key]);
+      } else if (name && !byKey[key].name) { byKey[key].name = name; }
+      return byKey[key].id;
+    }
+    ((paths && paths.features) || []).forEach(function (f) {
+      var g = f.geometry, p = f.properties || {};
+      if (!g) { return; }
+      var lines = g.type === 'LineString' ? [g.coordinates] : (g.type === 'MultiLineString' ? g.coordinates : []);
+      var kind = p.highway === 'steps' || p.wheelchair === 'no' ? 'steps' : 'path';
+      var name = p.name || (p.highway === 'steps' ? 'the steps' : '');
+      lines.forEach(function (line) {
+        for (var i = 1; i < line.length; i++) {
+          var a = nodeAt(line[i - 1], name), b = nodeAt(line[i], name);
+          if (a !== b) { edges.push({ from: a, to: b, kind: kind }); }
+        }
+      });
+    });
+    return { nodes: nodes, edges: edges };
+  }
+
+  // The best way from a starting point outdoors to a room inside a building.
+  // out: the outdoor graph, built by buildGraph with the start point and the building's entrances
+  //      as "entrances" (start id "START", entrance ids the same as the indoor ENTRANCES ids).
+  // indoor: the indoor graph. entranceIds: which indoor entrances to consider.
+  // places: { start: {x, y}, entrances: { id: {x, y} } } in outdoor metres, for the straight-line fallback.
+  // metersPerUnit: indoor map units to metres.
+  // Tries every entrance and keeps the one with the shortest total walk (outdoors plus indoors).
+  // If the outdoor paths do not connect (or there are none yet), it falls back to a straight line
+  // and says so with straight: true. Returns null when no entrance leads to the room.
+  function campusRoute(out, indoor, entranceIds, target, places, metersPerUnit, options) {
+    var best = null;
+    entranceIds.forEach(function (id) {
+      var inner = routeTo(indoor, id, target, options);
+      if (!inner) { return; }
+      var outer = out ? shortest(out, 'entrance:START', ['entrance:' + id], options) : null, straight = false;
+      if (!outer) {
+        var s = places.start, e = places.entrances[id];
+        if (!s || !e) { return; }
+        straight = true;
+        outer = { points: [[s.x, s.y], [e.x, e.y]], length: Math.sqrt((s.x - e.x) * (s.x - e.x) + (s.y - e.y) * (s.y - e.y)), ids: [], kinds: [] };
+      }
+      // A straight line ignores paths and buildings, so it only wins when nothing better exists.
+      var meters = outer.length * (straight ? 1.3 : 1) + inner.length * metersPerUnit;
+      if (!best || (best.straight && !straight) || (best.straight === straight && meters < best.meters)) {
+        best = { entrance: id, outdoor: outer, indoor: inner, straight: straight, meters: meters };
+      }
+    });
+    return best;
+  }
+
   return {
     MAX_SNAP: MAX_SNAP,
+    localFrame: localFrame,
+    outdoorNetwork: outdoorNetwork,
+    campusRoute: campusRoute,
     search: search,
     buildGraph: buildGraph,
     shortest: shortest,

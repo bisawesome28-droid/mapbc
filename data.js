@@ -27,9 +27,10 @@ window.LEVELS = [
 ];
 
 // Map units to real feet, used for the distance and walking-time estimates.
-// This is a rough guess. To fix it: measure the south wing main hallway on site, from the west door
-// to the east doors (about 1265 map units), and set feetPerUnit to real feet divided by 1265.
-window.SCALE = {"feetPerUnit": 0.28, "guess": true};
+// It comes from fitting the plan onto the real building outline (see GEO below). To make it exact,
+// measure the south wing main hallway on site, from the west door to the east doors (about 1265 map
+// units), and set feetPerUnit to real feet divided by 1265.
+window.SCALE = {"feetPerUnit": 0.1594, "guess": false, "source": "from the GEO fit below (OpenStreetMap outlines), about +/- 5%"};
 
 // Ties the floor plan to real GPS positions so the blue dot ("Locate me") can be drawn.
 // Each control point says: this spot on the plan (x, y in map units) is at this latitude and longitude.
@@ -39,7 +40,15 @@ window.SCALE = {"feetPerUnit": 0.28, "guess": true};
 //   {"label": "South wing, west end", "x": 61, "y": 364, "lat": 42.0000, "lng": -71.0000}
 // Run `node tests.js` afterwards: it checks the fit and flags a point that is probably a typo.
 // Until at least 2 points are here the page says the map is not calibrated yet.
-window.GEO = {"points": []};
+// These 4 points were worked out by fitting the traced Level 1 outline onto the OpenStreetMap footprint of
+// Stokes Hall North and South (they overlap by 91%; the plan is turned about -105 degrees from north).
+// To double-check: stand at a corner with GPS on, or compare with a satellite map, and fix any point that is off.
+window.GEO = {"source": "fitted to OpenStreetMap building outlines", "points": [
+  {"label": "South wing, west end", "x": 61, "y": 364, "lat": 42.3337285, "lng": -71.1713586},
+  {"label": "South wing, north-east tower", "x": 1207, "y": 118, "lat": 42.3341827, "lng": -71.1716765},
+  {"label": "North wing, north-east corner", "x": 2280, "y": 680, "lat": 42.3346989, "lng": -71.171523},
+  {"label": "North wing, south end", "x": 1975, "y": 1750, "lat": 42.3346933, "lng": -71.1708663}
+]};
 
 // Outside walls of each wing, traced clockwise. The bridge outline is listed before the wings
 // so the wing walls are drawn on top where they meet.

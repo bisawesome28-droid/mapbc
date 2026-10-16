@@ -388,6 +388,61 @@ test('real data: Level 1 routes never wander upstairs', function () {
   });
 });
 
+// ---------- Outdoor campus map ----------
+
+var OSM = require('./tools/osm_to_campus.js');
+var sampleExport = { type: 'FeatureCollection', features: [
+  { id: 'way/1', properties: { building: 'university', name: 'Test Hall', 'building:levels': '4' }, geometry: { type: 'Polygon', coordinates: [[[-71.1700, 42.3350], [-71.1698, 42.3350], [-71.1698, 42.3352], [-71.1700, 42.3350]]] } },
+  { id: 'way/2', properties: { building: 'yes' }, geometry: { type: 'Polygon', coordinates: [[[-71.1690, 42.3350], [-71.1688, 42.3350], [-71.1688, 42.3352], [-71.1690, 42.3350]]] } },
+  { id: 'way/3', properties: { highway: 'footway', surface: 'paved' }, geometry: { type: 'LineString', coordinates: [[-71.1699, 42.3349], [-71.1695, 42.3349]] } },
+  { id: 'way/4', properties: { highway: 'steps', step_count: '12' }, geometry: { type: 'LineString', coordinates: [[-71.1695, 42.3349], [-71.1694, 42.3351]] } },
+  { id: 'way/5', properties: { highway: 'motorway' }, geometry: { type: 'LineString', coordinates: [[-71.18, 42.33], [-71.17, 42.34]] } },
+  { id: 'node/6', properties: { entrance: 'main', name: 'Front door' }, geometry: { type: 'Point', coordinates: [-71.16991234567, 42.3349] } },
+  { id: 'node/7', properties: { natural: 'tree' }, geometry: { type: 'Point', coordinates: [-71.169, 42.335] } }
+] };
+
+test('campus import: sorts a mixed OpenStreetMap export into buildings, paths and entrances', function () {
+  var out = OSM.convert(sampleExport);
+  assert.deepStrictEqual(out.report, { buildings: 2, namedBuildings: 1, paths: 2, entrances: 1, skipped: 2 });
+  assert.strictEqual(out.buildings.features[0].properties.name, 'Test Hall', 'named buildings come first');
+  assert.strictEqual(out.buildings.features[0].properties.kind, 'university');
+  assert.strictEqual(out.paths.features[1].properties.step_count, '12');
+});
+
+test('campus import: rounds coordinates and keeps longitude first', function () {
+  var c = OSM.convert(sampleExport).entrances.features[0].geometry.coordinates;
+  assert.deepStrictEqual(c, [-71.1699123, 42.3349]);
+});
+
+test('campus import: empty or odd input does not crash', function () {
+  assert.strictEqual(OSM.convert({}).report.buildings, 0);
+  assert.strictEqual(OSM.convert({ features: [{ properties: {}, geometry: null }] }).report.skipped, 1);
+});
+
+test('campus config: centre is [longitude, latitude] and inside Massachusetts', function () {
+  require('./campus/config.js');
+  var C = global.window.CAMPUS;
+  assert.ok(C && C.center && C.center.length === 2, 'CAMPUS.center needs [lng, lat]');
+  assert.ok(C.center[0] < -69 && C.center[0] > -74, 'first number should be the longitude (about -71), got ' + C.center[0]);
+  assert.ok(C.center[1] > 41 && C.center[1] < 43, 'second number should be the latitude (about 42), got ' + C.center[1]);
+});
+
+test('campus data: campus/data.js loads and holds valid GeoJSON', function () {
+  require('./campus/data.js');
+  var C = global.window.CAMPUS_DATA;
+  ['buildings', 'paths', 'entrances'].forEach(function (n) {
+    assert.strictEqual(C[n].type, 'FeatureCollection', n);
+    C[n].features.forEach(function (f) { assert.ok(f.geometry && f.geometry.coordinates, n + ' has a feature with no shape'); });
+  });
+});
+
+test('campus import: writes a data.js that loads back to the same data', function () {
+  var out = OSM.convert(sampleExport), w = {};
+  new Function('window', OSM.toDataJs(out))(w);
+  assert.deepStrictEqual(w.CAMPUS_DATA.buildings, out.buildings);
+  assert.deepStrictEqual(w.CAMPUS_DATA.paths, out.paths);
+});
+
 // ---------- GPS blue dot ----------
 
 // Builds control points from a plan placed at a made-up spot on the ground: rotation in degrees,
@@ -488,8 +543,83 @@ test('real data: GPS control points (if any) are usable and fit well', function 
     assert.ok(g.rmsMeters < 8, 'control points miss by ' + g.rmsMeters.toFixed(1) + ' m on average; check point ' + g.worstIndex + ' (' + (pts[g.worstIndex].label || '') + ') for a typo');
   }
   // The fitted scale should roughly agree with SCALE.feetPerUnit once that is measured.
-  var feetPerUnit = 1 / (g.unitsPerMeter * 3.28084);
+  var feetPerUnit = 3.28084 / g.unitsPerMeter; // metres per unit, times feet per metre
   if (D.SCALE && !D.SCALE.guess) { assert.ok(Math.abs(feetPerUnit / D.SCALE.feetPerUnit - 1) < 0.15, 'GPS scale ' + feetPerUnit.toFixed(3) + ' ft/unit vs SCALE ' + D.SCALE.feetPerUnit); }
+});
+
+// ---------- Outdoors: walking paths and the way in ----------
+
+var F = ML.localFrame(42.334, -71.171);
+function ll(x, y) { var g = F.toLatLng(x, y); return [g.lng, g.lat]; } // metres -> GeoJSON [lng, lat]
+function line(pts, props) { return { type: 'Feature', properties: props || { highway: 'footway' }, geometry: { type: 'LineString', coordinates: pts.map(function (p) { return ll(p[0], p[1]); }) } }; }
+
+test('outdoors: lines that share a point are joined, steps are marked', function () {
+  var net = ML.outdoorNetwork({ features: [
+    line([[0, 0], [100, 0]]), line([[100, 0], [100, 80]], { highway: 'steps' }), line([[100, 0], [200, 0]], { highway: 'footway', wheelchair: 'no' })
+  ] }, F);
+  assert.strictEqual(net.nodes.length, 4, 'shared corner should be one point, got ' + net.nodes.length);
+  assert.deepStrictEqual(net.edges.map(function (e) { return e.kind; }), ['path', 'steps', 'steps']);
+  assert.ok(Math.abs(net.nodes[1].x - 100) < 0.01 && Math.abs(net.nodes[1].y) < 0.01, 'metres survive the round trip');
+});
+
+// A tiny campus: you start at the west end of a path. Door A is reached by steps, door B by a ramp-free
+// longer path. Inside, both doors lead to the same room.
+//   START (0,0) ---- (100,0) --steps-- (100,30) -- door A (100,45)
+//                       \---- (180,0) ------------------ door B (180,45)
+var tinyPaths = { features: [
+  line([[0, 0], [100, 0], [180, 0]]), line([[100, 0], [100, 30]], { highway: 'steps' }), line([[100, 30], [100, 40]]), line([[180, 0], [180, 40]])
+] };
+var tinyIndoor = {
+  nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 80, y: 0 }, { id: 'c', x: 40, y: 50 }],
+  edges: [{ from: 'a', to: 'c' }, { from: 'b', to: 'c' }]
+};
+var tinyRoom = { id: 'R', name: 'Room', doors: [[40, 60]] };
+var tinyDoors = [{ id: 'A', name: 'Door A', x: 0, y: -10 }, { id: 'B', name: 'Door B', x: 80, y: -10 }];
+function tinyRoute(acc, paths) {
+  var indoor = ML.buildGraph(tinyIndoor, [tinyRoom], tinyDoors, []);
+  var places = { start: { x: 0, y: 0 }, entrances: { A: { x: 100, y: 45 }, B: { x: 180, y: 45 } } };
+  var outEntr = [{ id: 'START', name: 'Your location', x: 0, y: 0 }, { id: 'A', name: 'Door A', x: 100, y: 45 }, { id: 'B', name: 'Door B', x: 180, y: 45 }];
+  var out = ML.buildGraph(ML.outdoorNetwork(paths, F), [], outEntr, []);
+  return ML.campusRoute(out, indoor, ['A', 'B'], { kind: 'room', o: tinyRoom }, places, 1, { accessible: acc });
+}
+
+test('outdoors to indoors: picks the door with the shortest total walk', function () {
+  var r = tinyRoute(false, tinyPaths);
+  assert.strictEqual(r.entrance, 'A');
+  assert.ok(!r.straight && r.outdoor.kinds.indexOf('steps') > -1);
+});
+
+test('outdoors to indoors: step-free avoids outdoor steps and uses the other door', function () {
+  var r = tinyRoute(true, tinyPaths);
+  assert.strictEqual(r.entrance, 'B');
+  assert.ok(r.outdoor.kinds.indexOf('steps') === -1);
+});
+
+test('outdoors to indoors: with no paths yet, falls back to a straight line and says so', function () {
+  var r = tinyRoute(false, { features: [] });
+  assert.ok(r.straight, 'should be marked straight');
+  assert.strictEqual(r.entrance, 'A', 'nearest door in a straight line');
+  assert.strictEqual(r.outdoor.points.length, 2);
+});
+
+test('outdoor directions name unnamed paths sensibly', function () {
+  var out = ML.buildGraph(ML.outdoorNetwork(tinyPaths, F), [], [{ id: 'START', name: 'Your location', x: 0, y: 0 }, { id: 'B', name: 'Door B', x: 180, y: 45 }], []);
+  var rr = ML.shortest(out, 'entrance:START', ['entrance:B'], { accessible: true });
+  var d = ML.describe(out, rr, 'Door B', { feetPerUnit: 3.28084, fallbackName: 'the path' });
+  var text = d.steps.map(function (s) { return s.text; }).join(' | ');
+  assert.ok(text.indexOf('end of the hall') === -1, text);
+  assert.ok(/Door B$/.test(text), text);
+});
+
+test('real data: from just west of Stokes, the straight-line fallback picks the west door for S03', function () {
+  var geo = ML.fitGeo(D.GEO.points), mpu = 1 / geo.unitsPerMeter;
+  var w = geo.toGeo(-300, 800);                         // a spot outside, west of the west door
+  var frame = ML.localFrame(w.lat, w.lng), places = { start: { x: 0, y: 0 }, entrances: {} };
+  D.ENTRANCES.forEach(function (en) { var g = geo.toGeo(en.x, en.y); places.entrances[en.id] = frame.toXY(g.lat, g.lng); });
+  var r = ML.campusRoute(null, graph, D.ENTRANCES.map(function (e) { return e.id; }), { kind: 'room', o: room('S03') }, places, mpu, {});
+  assert.strictEqual(r.entrance, 'E-S-WEST');
+  assert.ok(r.straight);
+  assert.ok(r.outdoor.length > 15 && r.outdoor.length < 40, 'about 300 units = ' + (300 * mpu).toFixed(0) + ' m, got ' + r.outdoor.length.toFixed(1));
 });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
