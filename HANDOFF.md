@@ -136,6 +136,13 @@ Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons nee
   nearest a hallway); the hallway lines; room shapes (squared up where nearly rectangular, a bit lumpy otherwise); and the Level 3
   bridge. The basement and penthouse plans were also photographed but are not traced.
   Redo it with the scripts' method if the plans change: the tracing scripts are not in the repo (they were scratch work).
+  **Straightening pass (map version p):** the Level 2 and 3 photos were taken at a slant, so a first pass came out curvy. They were
+  re-lined up with Level 4 (a full perspective fit, not just shift and scale), then every wall and room was forced to run only
+  horizontal or vertical, and walls that were nearly in line were snapped exactly in line. The outside walls of Level 3 and of the
+  Level 2 north wing reuse Level 4's (same building). A test (`Level 2 and 3 walls and rooms are straight`) fails if a slanted wall sneaks back in.
+  **S290 (Level 2):** the fire plan shows ENTRY S290 on Level 2 of the south wing, which is raised, so it is not a room. It is the
+  entrance `E-S-290` (`"level": "2"`, `"outdoor": true`): a gap in the Level 2 outside wall, in the "Starting from" list, and used by
+  walking directions from outside (`groundEntrances()` in index.html includes entrances marked `outdoor`). Door spot is a guess.
 - The plan is traced from the Stokes Level 1 brochure at full size (2722 x 1812 pixels). Map coordinates in data.js are pixel positions on that image, so you can check any point by opening the image. Don't publish the brochure image. It is ignored by git (keep it in reference/stokes-level1-brochure.png).
 - Level 1 has no indoor link between the wings. The architect describes the enclosed bridge as being on Level 2, with walkways at ground level, so routes between wings go outside and the page says so.
 - Seating rows, stair treads, elevator X marks and restroom symbols are drawn from simple rules ("seating", "stair", "cars", "restroom" in data.js). They show the kind of room, not exact furniture.
