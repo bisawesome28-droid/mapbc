@@ -1,3 +1,10 @@
+## Where things live now (read this first)
+- `schools/` holds all map data as JSON: one folder per school, one file per building. See `docs/DATA_FORMAT.md`.
+- `core/` holds the shared code (routes, search, floor plans as map shapes, map style). A native app uses the same files.
+- `web/` holds the web page only (`web/app.js`, `web/app.css`); `index.html` is just the page shell.
+- To add a building, follow `docs/ADDING_A_BUILDING.md`. Stokes Hall and McElroy Commons (floors 2 and 3) are mapped.
+- McElroy floor 1 is not mapped yet; the page shows it greyed out.
+
 # BC Campus Map: handoff notes
 
 ## Read this first: how the map fits together (Oct 16, 2026)
