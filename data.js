@@ -19,15 +19,27 @@ window.BUILDING = {
   "note": "Floor plan traced from a published brochure. Room IDs are placeholders until real room numbers are added."
 };
 
+// Floors, bottom to top. Anything in this file without a "level" is on level "1".
+// "blank": true marks a floor that is only a placeholder so far.
+window.LEVELS = [
+  {"id": "1", "name": "Level 1"},
+  {"id": "2", "name": "Level 2", "blank": true, "note": "Level 2 is a placeholder. Only the stairs, elevators and the enclosed bridge are placed, copied from where they are on Level 1. Rooms and hallways still need tracing."}
+];
+
 // Map units to real feet, used for the distance and walking-time estimates.
 // This is a rough guess. To fix it: measure the south wing main hallway on site, from the west door
 // to the east doors (about 1265 map units), and set feetPerUnit to real feet divided by 1265.
 window.SCALE = {"feetPerUnit": 0.28, "guess": true};
 
-// Outside walls of each wing, traced clockwise.
+// Outside walls of each wing, traced clockwise. The bridge outline is listed before the wings
+// so the wing walls are drawn on top where they meet.
 window.OUTLINES = [
   {"wing": "South", "points": [[61,364],[478,364],[478,305],[437,305],[437,186],[593,186],[603,162],[683,162],[693,186],[1043,186],[1043,118],[1207,118],[1207,257],[1371,257],[1371,745],[1450,745],[1450,815],[1371,815],[1371,1057],[1300,1057],[1290,1093],[1210,1093],[1200,1057],[1136,1057],[1136,1000],[993,1000],[993,1064],[864,1064],[864,1000],[507,1000],[507,1078],[332,1078],[332,1000],[107,1000],[107,590],[61,590]]},
-  {"wing": "North", "points": [[1664,690],[1768,690],[1768,532],[2004,532],[2004,600],[2121,600],[2121,680],[2280,680],[2280,880],[2215,880],[2215,1630],[2150,1630],[2150,1710],[1975,1710],[1975,1750],[1775,1750],[1775,1630],[1680,1630],[1680,1436],[1640,1436],[1640,1250],[1680,1250],[1680,820],[1664,820]]}
+  {"wing": "North", "points": [[1664,690],[1768,690],[1768,532],[2004,532],[2004,600],[2121,600],[2121,680],[2280,680],[2280,880],[2215,880],[2215,1630],[2150,1630],[2150,1710],[1975,1710],[1975,1750],[1775,1750],[1775,1630],[1680,1630],[1680,1436],[1640,1436],[1640,1250],[1680,1250],[1680,820],[1664,820]]},
+  // Level 2 placeholders: the Level 1 outlines without the ground-floor entrances and bays (a guess).
+  {"wing": "Bridge", "level": "2", "guess": true, "points": [[1360, 745], [1690, 745], [1690, 835], [1360, 835]]},
+  {"wing": "South", "level": "2", "guess": true, "points": [[61, 364], [478, 364], [478, 305], [437, 305], [437, 186], [593, 186], [603, 162], [683, 162], [693, 186], [1043, 186], [1043, 118], [1207, 118], [1207, 257], [1371, 257], [1371, 1057], [1136, 1057], [1136, 1000], [507, 1000], [507, 1078], [332, 1078], [332, 1000], [107, 1000], [107, 590], [61, 590]]},
+  {"wing": "North", "level": "2", "guess": true, "points": [[1664, 690], [1768, 690], [1768, 532], [2004, 532], [2004, 600], [2121, 600], [2121, 680], [2280, 680], [2280, 880], [2215, 880], [2215, 1630], [2150, 1630], [2150, 1710], [1975, 1710], [1975, 1630], [1680, 1630], [1680, 1436], [1640, 1436], [1640, 1250], [1680, 1250], [1680, 820], [1664, 820]]}
 ];
 
 // Columns along the outdoor walkway between the wings (drawing only).
@@ -97,7 +109,16 @@ window.ROOMS = [
   {"id": "N-STAIR-S", "door": "", "name": "Stair (south, north wing)", "type": "core", "wing": "North", "label": "Stair", "keywords": "stairs stairwell", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "shape": [[1979,1625],[2143,1625],[2143,1700],[1979,1700]], "doors": [[1979,1660]], "stair": true},
   {"id": "N-VEST-W", "door": "", "name": "West entry vestibule (walkway side)", "type": "common", "wing": "North", "label": "West\nentry", "keywords": "entrance connector", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "shape": [[1679,693],[1793,693],[1793,807],[1679,807]], "doors": [[1736,760]]},
   {"id": "N-VEST-S", "door": "", "name": "South entry vestibule", "type": "common", "wing": "North", "label": "South\nentry", "keywords": "entrance", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "shape": [[1796,1660],[1979,1660],[1979,1743],[1796,1743]], "doors": [[1890,1700]]},
-  {"id": "N-SVC-ENT", "door": "", "name": "Service entrance", "type": "core", "wing": "North", "label": "Service\nentry", "keywords": "entrance delivery", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "shape": [[2107,886],[2215,886],[2215,929],[2107,929]], "doors": [[2150,907]]}
+  {"id": "N-SVC-ENT", "door": "", "name": "Service entrance", "type": "core", "wing": "North", "label": "Service\nentry", "keywords": "entrance delivery", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "shape": [[2107,886],[2215,886],[2215,929],[2107,929]], "doors": [[2150,907]]},
+  // ---- Level 2 (placeholder: stairs, elevators and the bridge only, all guesses) ----
+  {"id": "S-STAIR-W-2", "door": "", "name": "Stair 1, west (Level 2)", "type": "core", "wing": "South", "label": "Stair", "keywords": "stairs stairwell", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "level": "2", "shape": [[461, 618], [543, 618], [543, 768], [461, 768]], "doors": [[500, 768]], "stair": true},
+  {"id": "S-STAIR-E-2", "door": "", "name": "Stair 1, east (Level 2)", "type": "core", "wing": "South", "label": "Stair", "keywords": "stairs stairwell", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "level": "2", "shape": [[1164, 679], [1293, 679], [1293, 771], [1164, 771]], "doors": [[1230, 771]], "stair": true},
+  {"id": "S-STAIR-NE-2", "door": "", "name": "Stair 2 (Level 2)", "type": "core", "wing": "South", "label": "Stair", "keywords": "stairs stairwell", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "level": "2", "shape": [[1214, 271], [1346, 271], [1346, 336], [1214, 336]], "doors": [[1214, 303]], "stair": true},
+  {"id": "S-ELEV-2", "door": "", "name": "Elevator (south wing, Level 2)", "type": "core", "wing": "South", "label": "Elev.", "keywords": "lift", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "level": "2", "shape": [[971, 614], [1014, 614], [1014, 750], [971, 750]], "doors": [[971, 682]], "cars": [[971, 614, 43, 68], [971, 682, 43, 68]]},
+  {"id": "N-STAIR-N-2", "door": "", "name": "Stair 3 (Level 2)", "type": "core", "wing": "North", "label": "Stair", "keywords": "stairs stairwell", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "level": "2", "shape": [[2000, 607], [2114, 607], [2114, 664], [2000, 664]], "doors": [[2090, 664]], "stair": true},
+  {"id": "N-STAIR-S-2", "door": "", "name": "Stair 4 (Level 2)", "type": "core", "wing": "North", "label": "Stair", "keywords": "stairs stairwell", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "level": "2", "shape": [[1979, 1625], [2143, 1625], [2143, 1700], [1979, 1700]], "doors": [[1979, 1660]], "stair": true},
+  {"id": "N-ELEV-2", "door": "", "name": "Elevators (north wing, Level 2)", "type": "core", "wing": "North", "label": "Elevators", "keywords": "lift", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "level": "2", "shape": [[1918, 807], [2064, 807], [2064, 857], [1918, 857]], "doors": [[1991, 807]], "cars": [[1918, 807, 73, 50], [1991, 807, 73, 50]]},
+  {"id": "BRIDGE-2", "door": "", "name": "Enclosed bridge (Level 2)", "type": "connector", "wing": "Connector", "label": "Enclosed\nbridge", "keywords": "bridge connector link between wings indoors", "where": "", "near": "", "directions": "", "verified": false, "photo": "", "level": "2", "shape": [[1371, 755], [1680, 755], [1680, 825], [1371, 825]], "doors": [[1525, 790]]}
 ];
 window.SPOTS = [
   {"id": "P-LOBBY", "label": "South wing building lobby", "keywords": "lobby main entrance", "photo": "", "verified": false, "x": 960, "y": 960},
@@ -128,7 +149,8 @@ window.ENTRANCES = [
 //   step-by-step directions say when the route passes that point.
 // edges: straight hallway lines between two nodes ("from" and "to" are node ids).
 //   "kind" can be "hall" (default), "outdoor" (walking outside), "steps" (a few steps in a hallway),
-//   or "stair" (a staircase to another floor). The accessible route skips "steps" and "stair".
+//   "stair" or "elevator" (to another level). The accessible route skips "steps" and "stair".
+// Nodes, rooms, entrances and photo points take an optional "level" (default "1").
 // Where a door joins a hallway line, the directions name it after the line's "to" end,
 // so short lines from an entrance are written pointing into the building.
 // You do NOT wire up room doors or entrances here. The map joins each one to the
@@ -177,19 +199,55 @@ window.PATHS = {
     {"id": "n_south_e", "x": 2075, "y": 1460, "name": "Hall by N07 and N08", "guess": true},
     {"id": "n_east_svc", "x": 2085, "y": 907, "name": "East hallway, by the service entrance", "guess": true},
     {"id": "n_east_end", "x": 2085, "y": 1100, "name": "East hallway, by the conference room", "guess": true},
-    {"id": "n_svc_door", "x": 2240, "y": 907, "name": "Service entrance", "guess": true}
+    {"id": "n_svc_door", "x": 2240, "y": 907, "name": "Service entrance", "guess": true},
+    // Stair and elevator landings on Level 1 (the points the stair/elevator links start from)
+    {"id": "s_elev_hall", "x": 925, "y": 682, "name": "Elevator lobby (south wing)"},
+    {"id": "s_main_stw", "x": 500, "y": 800, "name": "Main hallway, by Stair 1 (west)"},
+    {"id": "s_main_ste", "x": 1230, "y": 794, "name": "Main hallway, by Stair 1 (east)"},
+    {"id": "n_lobby_mid", "x": 1991, "y": 770, "name": "Elevator lobby (north wing)"},
+    {"id": "s_elev_1", "x": 992, "y": 682, "name": "Elevator (south wing)"},
+    {"id": "s_stw_1", "x": 500, "y": 720, "name": "Stair 1 (west)"},
+    {"id": "s_ste_1", "x": 1230, "y": 725, "name": "Stair 1 (east)"},
+    {"id": "s_st2_1", "x": 1260, "y": 303, "name": "Stair 2", "guess": true},
+    {"id": "n_elev_1", "x": 1991, "y": 832, "name": "Elevators (north wing)"},
+    {"id": "n_st3_1", "x": 2057, "y": 635, "name": "Stair 3", "guess": true},
+    {"id": "n_st4_1", "x": 2040, "y": 1662, "name": "Stair 4", "guess": true},
+    // ---- Level 2 (placeholder). Hallways copy the Level 1 lines; all are guesses. ----
+    {"id": "s_elev_2", "x": 992, "y": 682, "name": "Elevator (south wing)", "level": "2", "guess": true},
+    {"id": "s_stw_2", "x": 500, "y": 720, "name": "Stair 1 (west)", "level": "2", "guess": true},
+    {"id": "s_ste_2", "x": 1230, "y": 725, "name": "Stair 1 (east)", "level": "2", "guess": true},
+    {"id": "s_st2_2", "x": 1260, "y": 303, "name": "Stair 2", "level": "2", "guess": true},
+    {"id": "n_elev_2", "x": 1991, "y": 832, "name": "Elevators (north wing)", "level": "2", "guess": true},
+    {"id": "n_st3_2", "x": 2057, "y": 635, "name": "Stair 3", "level": "2", "guess": true},
+    {"id": "n_st4_2", "x": 2040, "y": 1662, "name": "Stair 4", "level": "2", "guess": true},
+    {"id": "s2_main_w", "x": 348, "y": 800, "name": "Hallway (south wing, Level 2)", "level": "2", "guess": true},
+    {"id": "s2_main_stw", "x": 500, "y": 800, "name": "Hallway by Stair 1 west (Level 2)", "level": "2", "guess": true},
+    {"id": "s2_main_e", "x": 925, "y": 800, "name": "Hallway (south wing, Level 2)", "level": "2", "guess": true},
+    {"id": "s2_elev_hall", "x": 925, "y": 682, "name": "Elevator lobby (south wing, Level 2)", "level": "2", "guess": true},
+    {"id": "s2_up", "x": 925, "y": 462, "name": "Hallway (south wing, Level 2)", "level": "2", "guess": true},
+    {"id": "s2_ne", "x": 1100, "y": 315, "name": "Hall by Stair 2 (Level 2)", "level": "2", "guess": true},
+    {"id": "s2_stair2", "x": 1190, "y": 310, "name": "Hall by Stair 2 (Level 2)", "level": "2", "guess": true},
+    {"id": "s2_main_ste", "x": 1230, "y": 794, "name": "Hallway by Stair 1 east (Level 2)", "level": "2", "guess": true},
+    {"id": "s2_bridge_s", "x": 1371, "y": 790, "name": "South end of the bridge", "level": "2", "guess": true},
+    {"id": "n2_bridge_n", "x": 1690, "y": 778, "name": "North end of the bridge", "level": "2", "guess": true},
+    {"id": "n2_lobby_w", "x": 1882, "y": 770, "name": "Elevator lobby (north wing, Level 2)", "level": "2", "guess": true},
+    {"id": "n2_lobby_mid", "x": 1991, "y": 770, "name": "Elevator lobby (north wing, Level 2)", "level": "2", "guess": true},
+    {"id": "n2_lobby_e", "x": 2085, "y": 770, "name": "Elevator lobby east end (Level 2)", "level": "2", "guess": true},
+    {"id": "n2_stair3", "x": 2090, "y": 690, "name": "Hall by Stair 3 (Level 2)", "level": "2", "guess": true},
+    {"id": "n2_main_s", "x": 1882, "y": 1640, "name": "Hallway (north wing, Level 2)", "level": "2", "guess": true},
+    {"id": "n2_stair4", "x": 1960, "y": 1650, "name": "Hall by Stair 4 (Level 2)", "level": "2", "guess": true}
   ],
   "edges": [
     {"from": "s_main_w", "to": "s_main_vw"},
-    {"from": "s_main_vw", "to": "s_main_e"},
+    {"from": "s_main_vw", "to": "s_main_stw"}, {"from": "s_main_stw", "to": "s_main_e"},
     {"from": "s_main_e", "to": "s_main_lobby"},
     {"from": "s_main_lobby", "to": "s_main_s1"},
-    {"from": "s_main_s1", "to": "s_main_cafe"},
+    {"from": "s_main_s1", "to": "s_main_ste"}, {"from": "s_main_ste", "to": "s_main_cafe"},
     {"from": "s_main_cafe", "to": "s_east_vest"},
     {"from": "s_up_w", "to": "s_up_vw", "guess": true},
     {"from": "s_up_vw", "to": "s_up_e"},
     {"from": "s_up_vw", "to": "s_main_vw"},
-    {"from": "s_up_e", "to": "s_main_e"},
+    {"from": "s_up_e", "to": "s_elev_hall"}, {"from": "s_elev_hall", "to": "s_main_e"},
     {"from": "s_adv_w", "to": "s_recep", "guess": true},
     {"from": "s_recep", "to": "s_up_e"},
     {"from": "s_recep", "to": "s_seat"},
@@ -206,7 +264,7 @@ window.PATHS = {
     {"from": "walk_s", "to": "walk_n", "kind": "outdoor", "guess": true},
     {"from": "walk_n", "to": "n_vest"},
     {"from": "n_vest", "to": "n_lobby_w"},
-    {"from": "n_lobby_w", "to": "n_lobby_e"},
+    {"from": "n_lobby_w", "to": "n_lobby_mid"}, {"from": "n_lobby_mid", "to": "n_lobby_e"},
     {"from": "n_lobby_e", "to": "n_stair3", "guess": true},
     {"from": "n_lobby_w", "to": "n_main_mid"},
     {"from": "n_main_mid", "to": "n_main_s"},
@@ -216,6 +274,44 @@ window.PATHS = {
     {"from": "n_main_s", "to": "n_south_e", "guess": true},
     {"from": "n_lobby_e", "to": "n_east_svc", "guess": true},
     {"from": "n_east_svc", "to": "n_east_end", "guess": true},
-    {"from": "n_svc_door", "to": "n_east_svc", "guess": true}
+    {"from": "n_svc_door", "to": "n_east_svc", "guess": true},
+    // Stairs and elevators: "length" is how far the trip "feels" in map units, so the router
+    // weighs waiting for an elevator against walking. Both ends are on different levels.
+    {"from": "s_elev_hall", "to": "s_elev_1"},
+    {"from": "s_main_stw", "to": "s_stw_1"},
+    {"from": "s_main_ste", "to": "s_ste_1"},
+    {"from": "s_stair2", "to": "s_st2_1", "guess": true},
+    {"from": "n_lobby_mid", "to": "n_elev_1"},
+    {"from": "n_stair3", "to": "n_st3_1", "guess": true},
+    {"from": "n_stair4", "to": "n_st4_1", "guess": true},
+    {"from": "s_elev_1", "to": "s_elev_2", "kind": "elevator", "length": 300, "guess": true},
+    {"from": "n_elev_1", "to": "n_elev_2", "kind": "elevator", "length": 300, "guess": true},
+    {"from": "s_stw_1", "to": "s_stw_2", "kind": "stair", "length": 160, "guess": true},
+    {"from": "s_ste_1", "to": "s_ste_2", "kind": "stair", "length": 160, "guess": true},
+    {"from": "s_st2_1", "to": "s_st2_2", "kind": "stair", "length": 160, "guess": true},
+    {"from": "n_st3_1", "to": "n_st3_2", "kind": "stair", "length": 160, "guess": true},
+    {"from": "n_st4_1", "to": "n_st4_2", "kind": "stair", "length": 160, "guess": true},
+    {"from": "s2_main_w", "to": "s2_main_stw", "guess": true},
+    {"from": "s2_main_stw", "to": "s2_main_e", "guess": true},
+    {"from": "s2_main_e", "to": "s2_main_ste", "guess": true},
+    {"from": "s2_main_ste", "to": "s2_bridge_s", "guess": true},
+    {"from": "s2_main_e", "to": "s2_elev_hall", "guess": true},
+    {"from": "s2_elev_hall", "to": "s2_up", "guess": true},
+    {"from": "s2_up", "to": "s2_ne", "guess": true},
+    {"from": "s2_ne", "to": "s2_stair2", "guess": true},
+    {"from": "s2_elev_hall", "to": "s_elev_2", "guess": true},
+    {"from": "s2_main_stw", "to": "s_stw_2", "guess": true},
+    {"from": "s2_main_ste", "to": "s_ste_2", "guess": true},
+    {"from": "s2_stair2", "to": "s_st2_2", "guess": true},
+    {"from": "s2_bridge_s", "to": "n2_bridge_n", "guess": true},
+    {"from": "n2_bridge_n", "to": "n2_lobby_w", "guess": true},
+    {"from": "n2_lobby_w", "to": "n2_lobby_mid", "guess": true},
+    {"from": "n2_lobby_mid", "to": "n2_lobby_e", "guess": true},
+    {"from": "n2_lobby_e", "to": "n2_stair3", "guess": true},
+    {"from": "n2_stair3", "to": "n_st3_2", "guess": true},
+    {"from": "n2_lobby_mid", "to": "n_elev_2", "guess": true},
+    {"from": "n2_lobby_w", "to": "n2_main_s", "guess": true},
+    {"from": "n2_main_s", "to": "n2_stair4", "guess": true},
+    {"from": "n2_stair4", "to": "n_st4_2", "guess": true}
   ]
 };

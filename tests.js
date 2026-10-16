@@ -298,7 +298,8 @@ test('every room has an outline and each door sits on (or next to) its own wall'
 test('every room sits inside its wing outline (except the outdoor walkway)', function () {
   D.ROOMS.forEach(function (r) {
     if (r.type === 'connector') { return; }
-    var wing = D.OUTLINES.filter(function (o) { return o.wing === r.wing; })[0];
+    var level = r.level || '1';
+    var wing = D.OUTLINES.filter(function (o) { return o.wing === r.wing && (o.level || '1') === level; })[0];
     r.shape.forEach(function (p) {
       assert.ok(inside(p, wing.points) || distToOutline(p, wing.points) < 25, r.id + ' corner ' + p + ' is outside the ' + r.wing + ' wing');
     });
@@ -311,6 +312,80 @@ test('crossing between wings is flagged as outdoors on Level 1', function () {
   var d = ML.describe(graph, r, 'N03', { feetPerUnit: D.SCALE.feetPerUnit });
   assert.ok(d.steps.some(function (s) { return s.outdoor && /outside/.test(s.text); }), 'a step should say outside');
   assert.ok(!go('E-S-WEST', 'S03').outdoor, 'staying in one wing is indoors');
+});
+
+// ---------- Levels: stairs and elevators ----------
+//
+//   Level 1:  IN - A ---- B ------------- E          stairs at B, elevator at E
+//   Level 2:            B2 ---- D ------- E2         the room's door is near D
+var two = {
+  nodes: [
+    { id: 'A', x: 0, y: 0 }, { id: 'B', x: 100, y: 0 }, { id: 'E', x: 300, y: 0 },
+    { id: 'B2', x: 100, y: 0, level: '2' }, { id: 'D', x: 200, y: 0, level: '2' }, { id: 'E2', x: 300, y: 0, level: '2' }
+  ],
+  edges: [
+    { from: 'A', to: 'B' }, { from: 'B', to: 'E' },
+    { from: 'B2', to: 'D' }, { from: 'D', to: 'E2' },
+    { from: 'B', to: 'B2', kind: 'stair', length: 50 },
+    { from: 'E', to: 'E2', kind: 'elevator', length: 200 }
+  ]
+};
+var upRoom = { id: 'UP', name: 'Room upstairs', level: '2', doors: [[200, 10]] };
+var twoEntr = { id: 'IN', name: 'Front door', x: -10, y: 0 };
+function twoRoute(acc) {
+  var g = ML.buildGraph(two, [upRoom], [twoEntr], []);
+  return { g: g, r: ML.routeTo(g, 'IN', { kind: 'room', o: upRoom }, { accessible: acc }) };
+}
+
+test('a route to another floor takes the stairs when that is quicker', function () {
+  var t = twoRoute(false);
+  assert.ok(t.r.kinds.indexOf('stair') > -1, 'kinds: ' + t.r.kinds);
+  assert.deepStrictEqual([t.r.levels[0], t.r.levels[t.r.levels.length - 1]], ['1', '2']);
+});
+
+test('the step-free route takes the elevator instead of the stairs', function () {
+  var t = twoRoute(true);
+  assert.ok(t.r.kinds.indexOf('elevator') > -1 && t.r.kinds.indexOf('stair') === -1, 'kinds: ' + t.r.kinds);
+});
+
+test('directions say "Take the elevator up to Level 2"', function () {
+  var t = twoRoute(true);
+  var d = ML.describe(t.g, t.r, 'Room upstairs', { feetPerUnit: 1, levelNames: { '2': 'Level 2' } });
+  var lvl = d.steps.filter(function (s) { return s.kind === 'level'; });
+  assert.strictEqual(lvl.length, 1);
+  assert.strictEqual(lvl[0].text, 'Take the elevator up to Level 2');
+  assert.strictEqual(lvl[0].turn, 'up');
+  assert.strictEqual(d.steps[d.steps.length - 1].level, '2');
+});
+
+test('a door only joins hallways on its own level', function () {
+  // The upstairs door sits right above the Level 1 hallway, but must join the Level 2 one.
+  var g = ML.buildGraph(two, [{ id: 'X', name: 'X', level: '2', doors: [[50, 5]] }], [], []);
+  var a = g.attach[0];
+  assert.strictEqual(a.level, '2');
+  assert.ok(a.to.x >= 100, 'joined at x=' + a.to.x + ', which is on Level 1');
+});
+
+test('a plain hallway joining two levels is reported as a mistake', function () {
+  var bad = { nodes: two.nodes, edges: [{ from: 'A', to: 'D' }] };
+  assert.ok(ML.buildGraph(bad, [], [], []).problems.some(function (p) { return /joins level 1 and level 2/.test(p); }));
+});
+
+test('real data: every Level 2 room can be reached step-free, by elevator only', function () {
+  D.ROOMS.filter(function (r) { return r.level === '2'; }).forEach(function (rm) {
+    D.ENTRANCES.forEach(function (en) {
+      var r = ML.routeTo(graph, en.id, { kind: 'room', o: rm }, { accessible: true });
+      assert.ok(r, en.id + ' cannot reach ' + rm.id + ' step-free');
+      assert.ok(r.kinds.indexOf('stair') === -1 && r.kinds.indexOf('elevator') > -1, en.id + ' to ' + rm.id + ': ' + r.kinds.join(','));
+    });
+  });
+});
+
+test('real data: Level 1 routes never wander upstairs', function () {
+  D.ROOMS.filter(function (r) { return !r.level || r.level === '1'; }).forEach(function (rm) {
+    var r = go('E-S-WEST', rm.id);
+    assert.ok(r.levels.every(function (l) { return l === '1'; }), 'route to ' + rm.id + ' leaves Level 1');
+  });
 });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

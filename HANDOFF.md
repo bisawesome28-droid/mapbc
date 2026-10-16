@@ -27,6 +27,21 @@
 - Seating rows, stair treads, elevator X marks and restroom symbols are drawn from simple rules ("seating", "stair", "cars", "restroom" in data.js). They show the kind of room, not exact furniture.
 - All door positions are guesses. Hallways marked "guess": true need checking on site.
 
+## Floors (levels)
+- `window.LEVELS` in data.js lists the floors. Anything without a `"level"` is on Level 1.
+- Level 2 is a placeholder for now. It has the outside walls (dashed, copied from Level 1), the 5 staircases and
+  2 elevators directly above their Level 1 spots, the enclosed bridge, and a skeleton of hallways. All are guesses.
+- How floors connect: a stair or elevator is a pair of points, one on each floor, joined by an edge with
+  `"kind": "stair"` or `"kind": "elevator"` and a `"length"` (how "far" the trip feels: stairs 160, elevator 300,
+  so the router weighs waiting for an elevator against walking). Example from data.js:
+  `{"from": "s_elev_1", "to": "s_elev_2", "kind": "elevator", "length": 300}`
+- The step-free route never uses `"stair"` edges, so it automatically walks to an elevator.
+- Doors only connect to hallways on their own floor, so a Level 2 room never "falls through" to Level 1.
+- To fill in Level 2 for real: trace its rooms and hallways with `"level": "2"` the same way as Level 1, and remove
+  `"blank": true` from its entry in LEVELS. A Level 3 works the same way.
+- On the page: the 2 / 1 buttons on the map switch floors. Routes that change floor show "Up to Level 2" on the map,
+  a "Take the elevator up to Level 2" step with a "Show Level 2" button, and a bar listing the floors used.
+
 ## Map scale (distance and time estimates)
 `window.SCALE` in data.js turns map units into feet. The value (0.28) is a guess. Measure one real hallway,
 for example the south wing main hallway (about 1265 map units from the west door to the east doors), and set
