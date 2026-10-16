@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Stokes Hall indoor map</title>
+<title>Boston College campus map</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238c1d2f'/%3E%3Cpath d='M16 6a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z' fill='white'/%3E%3Ccircle cx='16' cy='13' r='2.6' fill='%238c1d2f'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <style>
@@ -350,7 +350,7 @@ dd.none{color:var(--muted)}
 
 <header class="topbar">
   <div class="logo"><span class="ico" id="logoico"></span></div>
-  <div class="brand"><b id="title">Stokes Hall</b><span>Campus map</span></div>
+  <div class="brand"><b id="title">Boston College</b><span id="subtitle">Campus map</span></div>
   <span class="pill" id="level"></span>
   <span class="spacer"></span>
   <span class="pill hot hide-sm">Proof of concept</span>
@@ -425,7 +425,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 g'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 h'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -500,8 +500,19 @@ dd.none{color:var(--muted)}
   }
 
   // ---------- Header ----------
-  $('title').textContent = B.name;
+  // The header says the campus name, and switches to the building's name while you are looking inside it.
+  var headerInside = null;
+  function renderHeader(inside) {
+    if (inside === headerInside) { return; }
+    headerInside = inside;
+    var campus = (window.CAMPUS && window.CAMPUS.name) || 'Campus';
+    $('title').textContent = inside ? B.name : campus;
+    $('subtitle').textContent = inside ? campus : 'Campus map';
+    $('level').style.display = inside ? '' : 'none';
+    document.title = inside ? B.name + ' | ' + campus + ' map' : campus + ' campus map';
+  }
   $('level').textContent = B.level;
+  renderHeader(false);
   fillIcon('logoico', 'pin'); fillIcon('chev', 'chev'); fillIcon('locico', 'crosshair');
 
   // ---------- Map drawing ----------
@@ -860,6 +871,7 @@ dd.none{color:var(--muted)}
     var op = Math.max(0, Math.min(1, (buildingFill() - SHOW_INSIDE_AT) / FADE_OVER));
     svg.style.opacity = op.toFixed(3);
     svg.style.display = op > 0 ? '' : 'none';
+    renderHeader(op > 0);
   }
 
   // How much of the screen the building fills: 0.5 means its width (or height) is half the map's width
