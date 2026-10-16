@@ -422,7 +422,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 e'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 f'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -828,10 +828,10 @@ dd.none{color:var(--muted)}
     geo = ML.fitGeo([{ x: FULL.x, y: FULL.y, lat: a0.lat, lng: a0.lng }, { x: FULL.x + 1000, y: FULL.y, lat: b0.lat, lng: b0.lng }]);
     geoParked = true;
   }
-  // When the inside of Stokes shows: only once the building fills more than half of the map area on screen
-  // (its width or its height, whichever is bigger, measured on the screen). Below that it looks like any
+  // When the inside of Stokes shows: only once you are zoomed in past the whole building: its width or its height, whichever
+  // is bigger, is at least as big as the map area on screen (so you have to want to see inside it). Below that it looks like any
   // other building. It fades in over the next few percent so it does not pop.
-  var SHOW_INSIDE_AT = 0.5, FADE_OVER = 0.06;
+  var SHOW_INSIDE_AT = 1.0, FADE_OVER = 0.15;
   var START_ZOOM_OUT = 1.5; // the page opens this many zoom steps further out than "building fits"
 
 
@@ -904,7 +904,12 @@ dd.none{color:var(--muted)}
     var b = boxOf(pts);
     return [b.x, b.y, b.x + b.w, b.y + b.h];
   }
-  function showAll() { fitPlanBox(planBox(), 40, 19.2); }
+  // The "see inside" view: a bit closer than the whole building, so the inside shows (see SHOW_INSIDE_AT).
+  function insideBox() {
+    var b = planBox(), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2, k = 0.32;
+    return [cx - (b[2] - b[0]) * k, cy - (b[3] - b[1]) * k, cx + (b[2] - b[0]) * k, cy + (b[3] - b[1]) * k];
+  }
+  function showAll() { fitPlanBox(insideBox(), 40, 20.5); }
   function zoomBy(f) { if (!map) { return; } if (f < 1) { map.zoomIn(); } else { map.zoomOut(); } }
   function toWorld(clientX, clientY) {
     var r = map.getContainer().getBoundingClientRect(), ll = map.unproject([clientX - r.left, clientY - r.top]);
@@ -1779,7 +1784,7 @@ dd.none{color:var(--muted)}
   function choose(m, quick) {
     if (m.kind === 'building' && isStokes(m.o.properties.name)) {
       query = ''; input.value = ''; renderResults(); refreshStyles();
-      fitPlanBox(planBox(), 40, 19.2);
+      showAll();
       input.blur();
       return;
     }
