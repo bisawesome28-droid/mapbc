@@ -153,8 +153,8 @@ The crosshair button shows where you are, anywhere on campus, with a faint circl
 ## Floors (levels)
 - `window.LEVELS` in data.js lists the floors. Anything without a `"level"` is on Level 1.
 - Levels 2, 3 and 4 are traced from the posted fire department plans (see "Levels 2 to 4" above): rooms with real numbers, hallways,
-  and the 5 staircases and 2 elevators directly above their Level 1 spots. Stair 2 and the south wing's Stair 1 north end stop at
-  Level 2/3 as drawn on the plans (Stair 1 north end is only on Levels 1 and 2).
+  and the 5 staircases and 2 elevators directly above their Level 1 spots. The south wing's Stair 1 north end only goes between Levels 1 and 2 (it is not on Levels 3 and 4 in the plans);
+  the other stairs and the elevators go all the way up.
 - How floors connect: a stair or elevator is a pair of points, one on each floor, joined by an edge with
   `"kind": "stair"` or `"kind": "elevator"` and a `"length"` (how "far" the trip feels: stairs 160, elevator 300,
   so the router weighs waiting for an elevator against walking). Example from data.js:
