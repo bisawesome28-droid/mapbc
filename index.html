@@ -12,9 +12,9 @@
   --accent:#8c1d2f;--accent-soft:#f8e4e8;
   --route:#0a6cff;--route-soft:#e4efff;
   --ok:#12804d;--ok-soft:#dff4e8;--warn:#9a5a06;--warn-soft:#fcefd2;
-  --map:#f3f6fb;--shell:#ffffff;--shell-line:#cfd6e2;--grid:#cdd4e0;
-  --c-classroom:#f4cfc7;--c-office:#f7e7ab;--c-service:#f8cb98;--c-it:#ddddab;
-  --c-common:#cfe4f6;--c-core:#e1e5ec;--c-conf:#f0cfe1;--c-connector:#edf0f5;
+  --map:#eef1f6;--grid:#cfd6e1;--floor:#ffffff;--wall:#2c3542;--fix:#eceff3;--label-halo:rgba(255,255,255,.85);
+  --c-classroom:#f7ddd7;--c-office:#faefc6;--c-service:#fadbb8;--c-it:#e7e7c4;
+  --c-common:#e3eff9;--c-core:#e9ecf1;--c-conf:#f4dde9;--c-connector:#e6e9ee;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 10px 30px rgba(16,24,40,.08);
   color-scheme:light;
 }
@@ -24,7 +24,7 @@
     --accent:#f08a9b;--accent-soft:#3a1d26;
     --route:#4db3ff;--route-soft:#12293f;
     --ok:#5fd39b;--ok-soft:#10301f;--warn:#f2b55d;--warn-soft:#352610;
-    --map:#0a0f16;--shell:#0f1620;--shell-line:#263446;--grid:#1a2331;
+    --map:#080c12;--grid:#18202c;--floor:#121a24;--wall:#8fa3bd;--fix:#19222e;--label-halo:rgba(18,26,36,.85);
     --c-classroom:#4d2931;--c-office:#4b4421;--c-service:#58391d;--c-it:#40432a;
     --c-common:#1f3b54;--c-core:#27303b;--c-conf:#4b2b40;--c-connector:#1b222c;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
@@ -36,7 +36,7 @@
   --accent:#f08a9b;--accent-soft:#3a1d26;
   --route:#4db3ff;--route-soft:#12293f;
   --ok:#5fd39b;--ok-soft:#10301f;--warn:#f2b55d;--warn-soft:#352610;
-  --map:#0a0f16;--shell:#0f1620;--shell-line:#263446;--grid:#1a2331;
+  --map:#080c12;--grid:#18202c;--floor:#121a24;--wall:#8fa3bd;--fix:#19222e;--label-halo:rgba(18,26,36,.85);
   --c-classroom:#4d2931;--c-office:#4b4421;--c-service:#58391d;--c-it:#40432a;
   --c-common:#1f3b54;--c-core:#27303b;--c-conf:#4b2b40;--c-connector:#1b222c;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
@@ -149,6 +149,7 @@ button{cursor:pointer}
 .step.start .ico{background:var(--ok-soft);color:var(--ok);border-color:transparent}
 .step.arrive .ico{background:var(--accent);color:#fff;border-color:transparent}
 .step .txt{padding-top:6px;font-weight:550;min-width:0}
+.step .tag{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 7px;border-radius:99px;background:var(--route-soft);color:var(--route);vertical-align:2px}
 .step .ft{padding-top:7px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:11px;padding:8px 13px;font-size:14px;font-weight:600}
@@ -199,31 +200,54 @@ dd.none{color:var(--muted)}
   .legend button{white-space:nowrap}
 }
 
-/* SVG layers */
+/* SVG layers. Sizes are in map units (brochure pixels); --u is map units per screen pixel. */
 .bgrid{fill:url(#dots)}
 .dot{fill:var(--grid)}
-.shell{fill:var(--shell);stroke:var(--shell-line);stroke-width:1.5;filter:url(#lift)}
-.wing{font-size:11px;font-weight:700;letter-spacing:.22em;fill:var(--muted);opacity:.7;pointer-events:none}
+.bwall{fill:var(--floor);stroke:var(--wall);stroke-width:12;stroke-linejoin:miter;filter:url(#lift)}
+.pier{fill:var(--wall)}
+.pillar{fill:var(--wall)}
+.wing{font-size:30px;font-weight:800;letter-spacing:.3em;fill:var(--muted);opacity:.75;pointer-events:none}
+.fix{fill:var(--fix);stroke:var(--wall);stroke-width:3}
+.fixl{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;fill:var(--muted);visibility:hidden;pointer-events:none}
+.z-in .fixl{visibility:visible}
 .room{cursor:pointer;transition:opacity .2s}
-.room rect{stroke-width:1;transition:stroke .15s,stroke-width .15s}
-.room text{font-size:10.5px;font-weight:650;fill:var(--fg);pointer-events:none;letter-spacing:.01em}
-.room:hover rect{stroke:var(--fg);stroke-width:1.6}
+.room .shape{stroke:var(--wall);stroke-width:3;stroke-linejoin:miter;transition:stroke .15s,stroke-width .15s}
+.room .part{stroke:var(--wall);stroke-width:2;opacity:.75}
+.furn{pointer-events:none;opacity:.42}
+.furn .row{fill:none;stroke:var(--fg);stroke-width:4.5;stroke-linecap:round}
+.furn .board{stroke:var(--fg);stroke-width:4;stroke-linecap:round}
+.furn .lectern{fill:var(--fg)}
+.furn .table{fill:none;stroke:var(--fg);stroke-width:4}
+.furn .tread{stroke:var(--fg);stroke-width:1.6}
+.furn .stair-arrow{stroke:var(--fg);stroke-width:2.5}
+.arrowhead{fill:var(--fg);opacity:.6}
+.furn .car{fill:none;stroke:var(--fg);stroke-width:2}
+.wc{fill:var(--fg);opacity:.45;pointer-events:none}
+.rlabel{font-size:clamp(11px,calc(var(--u,1) * 11.5px),30px);font-weight:700;fill:var(--fg);pointer-events:none;letter-spacing:.01em;paint-order:stroke;stroke:var(--label-halo);stroke-width:calc(var(--u,1) * 3.5px);stroke-linejoin:round}
+.rlabel.tiny{visibility:hidden}
+.z-in .rlabel.tiny,.room.sel .rlabel.tiny{visibility:visible}
+.room:hover .shape{stroke:var(--route);stroke-width:5}
 .room:focus{outline:none}
-.room:focus-visible rect{stroke:var(--route);stroke-width:2.5}
-.t-classroom rect{fill:var(--c-classroom);stroke:color-mix(in srgb,var(--c-classroom) 55%,var(--fg))}
-.t-office rect{fill:var(--c-office);stroke:color-mix(in srgb,var(--c-office) 55%,var(--fg))}
-.t-service rect{fill:var(--c-service);stroke:color-mix(in srgb,var(--c-service) 55%,var(--fg))}
-.t-it rect{fill:var(--c-it);stroke:color-mix(in srgb,var(--c-it) 55%,var(--fg))}
-.t-common rect{fill:var(--c-common);stroke:color-mix(in srgb,var(--c-common) 55%,var(--fg))}
-.t-core rect{fill:var(--c-core);stroke:color-mix(in srgb,var(--c-core) 55%,var(--fg))}
-.t-conf rect{fill:var(--c-conf);stroke:color-mix(in srgb,var(--c-conf) 55%,var(--fg))}
-.t-connector rect{fill:var(--c-connector);stroke:color-mix(in srgb,var(--c-connector) 55%,var(--fg));stroke-dasharray:4 3}
+.room:focus-visible .shape{stroke:var(--route);stroke-width:6}
+.t-classroom .shape{fill:var(--c-classroom)}
+.t-office .shape{fill:var(--c-office)}
+.t-service .shape{fill:var(--c-service)}
+.t-it .shape{fill:var(--c-it)}
+.t-common .shape{fill:var(--c-common)}
+.t-core .shape{fill:var(--c-core)}
+.t-conf .shape{fill:var(--c-conf)}
+.t-connector .shape{fill:var(--c-connector);stroke-dasharray:14 8;stroke-width:2.5}
 .room.fade{opacity:.5}
 .room.dim{opacity:.12}
-.room.match rect{stroke:var(--accent);stroke-width:2.5}
-.room.sel rect{stroke:var(--accent);stroke-width:3.5;filter:drop-shadow(0 0 7px var(--accent));animation:glow 1.8s ease-in-out infinite}
-.room.sel text{font-weight:800}
+.room.match .shape{stroke:var(--accent);stroke-width:6}
+.room.sel .shape{stroke:var(--accent);stroke-width:8;filter:drop-shadow(0 0 14px var(--accent));animation:glow 1.8s ease-in-out infinite}
+.room.sel .furn{opacity:.6}
 @keyframes glow{50%{stroke-opacity:.45}}
+.doors{pointer-events:none}
+.door-gap{stroke:var(--floor);stroke-width:7}
+.door-leaf{stroke:var(--wall);stroke-width:2.5}
+.door-arc{fill:none;stroke:var(--wall);stroke-width:1.5;stroke-dasharray:4 3;opacity:.8}
+.entry-gap{stroke:var(--floor);stroke-width:16}
 
 .mk{transform:scale(var(--u,1))}
 .spot{cursor:pointer}
@@ -262,12 +286,12 @@ dd.none{color:var(--muted)}
   .route-flow,.route-end-ring,.entrance.on .ering,.room.sel rect{animation:none}
   .route-flow{display:none}
 }
-.net-edge{stroke:var(--muted);stroke-width:2.5;fill:none;stroke-linecap:round}
-.net-edge.guess{stroke:#e28a1c;stroke-dasharray:6 4}
+.net-edge{stroke:var(--muted);stroke-width:calc(var(--u,1) * 2.5);fill:none;stroke-linecap:round}
+.net-edge.guess{stroke:#e28a1c;stroke-dasharray:calc(var(--u,1) * 7) calc(var(--u,1) * 5)}
 .net-node{fill:var(--muted)}
 .net-node.guess{fill:#e28a1c}
-.net-attach{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2}
-.net-door{fill:var(--surface);stroke:var(--muted);stroke-width:1.5}
+.net-attach{stroke:var(--muted);stroke-width:calc(var(--u,1) * 1.2);stroke-dasharray:calc(var(--u,1) * 2) calc(var(--u,1) * 2)}
+.net-door{fill:var(--surface);stroke:var(--muted);stroke-width:calc(var(--u,1) * 1.5)}
 #layer-net,#layer-route{pointer-events:none}
 </style>
 </head>
@@ -334,7 +358,7 @@ dd.none{color:var(--muted)}
 <script src="logic.js"></script>
 <script>
 (function () {
-  var B = window.BUILDING, ROOMS = window.ROOMS, SPOTS = window.SPOTS, SHELLS = window.SHELLS;
+  var B = window.BUILDING, ROOMS = window.ROOMS, SPOTS = window.SPOTS;
   var ENTRANCES = window.ENTRANCES || [], PATHS = window.PATHS || { nodes: [], edges: [] };
   var SCALE = window.SCALE || { feetPerUnit: 0.7, guess: true };
   var ML = window.MapLogic;
@@ -350,7 +374,7 @@ dd.none{color:var(--muted)}
   var LEGEND = ['classroom', 'office', 'service', 'it', 'common', 'conf', 'core'];
   var QUICK = [['Restrooms', 'restrooms'], ['Elevators', 'elevators'], ['Cafe', 'cafe'], ['Advising', 'advising']];
   var NS = 'http://www.w3.org/2000/svg';
-  var FULL = { x: 10, y: 40, w: 990, h: 750 };
+  var FULL = { x: 30, y: 95, w: 2290, h: 1700 };
   var REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Icons: plain 24x24 line drawings.
@@ -417,28 +441,199 @@ dd.none{color:var(--muted)}
   fillIcon('logoico', 'pin'); fillIcon('chev', 'chev');
 
   // ---------- Map drawing ----------
+  // The plan is drawn like an architect's floor plan: outside walls with buttresses, rooms with
+  // thin walls, door swings, stair treads, elevator cars, restroom symbols and seating rows.
+  // Seating, stairs and so on are drawn from simple rules. They show what kind of room it is,
+  // not the exact furniture.
+  var OUTLINES = window.OUTLINES || [], FIXTURES = window.FIXTURES || [], PILLARS = window.PILLARS || [];
+
+  function boxOf(pts) {
+    var b = [Infinity, Infinity, -Infinity, -Infinity];
+    pts.forEach(function (p) { b[0] = Math.min(b[0], p[0]); b[1] = Math.min(b[1], p[1]); b[2] = Math.max(b[2], p[0]); b[3] = Math.max(b[3], p[1]); });
+    return { x: b[0], y: b[1], w: b[2] - b[0], h: b[3] - b[1] };
+  }
+  function ptsAttr(pts) { return pts.map(function (p) { return p[0] + ',' + p[1]; }).join(' '); }
+  ROOMS.forEach(function (r) { r._box = boxOf(r.shape || [[r.x, r.y], [r.x + r.w, r.y + r.h]]); if (!r.shape) { r.shape = [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]]; } });
+
+  // Closest wall of a polygon to a point: returns the foot point, wall direction and inward normal.
+  function nearestWall(poly, p) {
+    var best = null, cx = 0, cy = 0;
+    poly.forEach(function (q) { cx += q[0] / poly.length; cy += q[1] / poly.length; });
+    for (var i = 0; i < poly.length; i++) {
+      var a = poly[i], b = poly[(i + 1) % poly.length];
+      var dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
+      if (!len) { continue; }
+      var t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (len * len)));
+      var fx = a[0] + t * dx, fy = a[1] + t * dy, d = Math.hypot(p[0] - fx, p[1] - fy);
+      if (!best || d < best.d) {
+        var ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
+        if ((cx - fx) * nx + (cy - fy) * ny < 0) { nx = -nx; ny = -ny; }
+        best = { d: d, x: fx, y: fy, ux: ux, uy: uy, nx: nx, ny: ny };
+      }
+    }
+    return best;
+  }
+
+  // A door: a gap in the wall, the door leaf, and its swing arc into the room.
+  function drawDoor(parent, poly, p, width) {
+    var w = nearestWall(poly, p);
+    if (!w || w.d > 3) { return; }
+    var hw = width / 2;
+    var h = [w.x - w.ux * hw, w.y - w.uy * hw], e = [w.x + w.ux * hw, w.y + w.uy * hw];
+    var tip = [h[0] + w.nx * width, h[1] + w.ny * width];
+    var cross = (tip[0] - h[0]) * (e[1] - h[1]) - (tip[1] - h[1]) * (e[0] - h[0]);
+    el('line', { 'class': 'door-gap', x1: h[0], y1: h[1], x2: e[0], y2: e[1] }, parent);
+    el('line', { 'class': 'door-leaf', x1: h[0], y1: h[1], x2: tip[0], y2: tip[1] }, parent);
+    el('path', { 'class': 'door-arc', d: 'M' + tip[0] + ' ' + tip[1] + ' A' + width + ' ' + width + ' 0 0 ' + (cross > 0 ? 1 : 0) + ' ' + e[0] + ' ' + e[1] }, parent);
+  }
+
+  // Buttresses: small stone piers sticking out of the long outside walls.
+  function drawPiers(parent, poly) {
+    var area = 0;
+    for (var i = 0; i < poly.length; i++) { var a = poly[i], b = poly[(i + 1) % poly.length]; area += a[0] * b[1] - b[0] * a[1]; }
+    for (var k = 0; k < poly.length; k++) {
+      var p = poly[k], q = poly[(k + 1) % poly.length];
+      var dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy);
+      if (len < 150) { continue; }
+      var ux = dx / len, uy = dy / len, nx = area > 0 ? uy : -uy, ny = area > 0 ? -ux : ux;
+      var n = Math.floor((len - 60) / 78);
+      for (var j = 0; j <= n; j++) {
+        var s = 30 + (len - 60) * (n ? j / n : 0.5), cx = p[0] + ux * s, cy = p[1] + uy * s;
+        var pts = [[cx - ux * 10, cy - uy * 10], [cx + ux * 10, cy + uy * 10], [cx + ux * 8 + nx * 13, cy + uy * 8 + ny * 13], [cx - ux * 8 + nx * 13, cy - uy * 8 + ny * 13]];
+        el('polygon', { 'class': 'pier', points: ptsAttr(pts) }, parent);
+      }
+    }
+  }
+
+  // Which side of the room the (first) door is on. The front of a classroom is the far side.
+  function doorSide(r) {
+    var b = r._box, d = r.doors[0];
+    var sides = { top: Math.abs(d[1] - b.y), bottom: Math.abs(d[1] - (b.y + b.h)), left: Math.abs(d[0] - b.x), right: Math.abs(d[0] - (b.x + b.w)) };
+    return Object.keys(sides).sort(function (a, c) { return sides[a] - sides[c]; })[0];
+  }
+
+  function drawSeating(g, r) {
+    var b = r._box, side = doorSide(r);
+    var vertical = side === 'top' || side === 'bottom'; // rows run left-right when the door is top or bottom
+    // Local frame: "across" runs along the rows, "depth" runs from the front wall to the back wall.
+    var a0 = vertical ? b.x : b.y, a1 = vertical ? b.x + b.w : b.y + b.h;
+    var front = { top: b.y + b.h, bottom: b.y, left: b.x + b.w, right: b.x }[side];
+    var back = { top: b.y, bottom: b.y + b.h, left: b.x, right: b.x + b.w }[side];
+    var dir = back > front ? 1 : -1, depth = Math.abs(back - front);
+    var P = function (across, d) { var v = front + dir * d; return vertical ? [across, v] : [v, across]; };
+    var span = a1 - a0, m = span * 0.13, mid = (a0 + a1) / 2;
+    var fg = el('g', { 'class': 'furn' }, g);
+    // Teaching wall: a board on the front wall and a small desk.
+    var b0 = P(mid - span * 0.22, 7), b1 = P(mid + span * 0.22, 7);
+    el('line', { 'class': 'board', x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1] }, fg);
+    if (r.seating === 'table') {
+      var t0 = P(a0 + span * 0.24, depth * 0.3), t1 = P(a1 - span * 0.24, depth * 0.78);
+      var tx = Math.min(t0[0], t1[0]), ty = Math.min(t0[1], t1[1]);
+      el('rect', { 'class': 'table', x: tx, y: ty, width: Math.abs(t1[0] - t0[0]), height: Math.abs(t1[1] - t0[1]), rx: 10 }, fg);
+      return;
+    }
+    var desk = P(mid, depth * 0.16);
+    el('circle', { 'class': 'lectern', cx: desk[0], cy: desk[1], r: 6 }, fg);
+    var start = depth * 0.3, stop = depth * 0.9, gap = 24, rows = Math.max(2, Math.floor((stop - start) / gap));
+    for (var i = 0; i <= rows; i++) {
+      var dd = start + (stop - start) * i / rows;
+      if (r.seating === 'tiered') {
+        var bow = 10 + i * 1.5;
+        var s0 = P(a0 + m, dd - bow), c = P(mid, dd + bow), s1 = P(a1 - m, dd - bow);
+        el('path', { 'class': 'row', d: 'M' + s0[0] + ' ' + s0[1] + ' Q' + c[0] + ' ' + c[1] + ' ' + s1[0] + ' ' + s1[1] }, fg);
+      } else {
+        var aisle = span * 0.06, l0 = P(a0 + m, dd), l1 = P(mid - aisle, dd), r0 = P(mid + aisle, dd), r1 = P(a1 - m, dd);
+        el('line', { 'class': 'row', x1: l0[0], y1: l0[1], x2: l1[0], y2: l1[1] }, fg);
+        el('line', { 'class': 'row', x1: r0[0], y1: r0[1], x2: r1[0], y2: r1[1] }, fg);
+      }
+    }
+  }
+
+  function drawStair(g, r) {
+    var b = r._box, fg = el('g', { 'class': 'furn' }, g), long = b.w > b.h;
+    var n = Math.floor((long ? b.w : b.h) * 0.8 / 11);
+    for (var i = 0; i <= n; i++) {
+      var s = (long ? b.x + b.w * 0.1 : b.y + b.h * 0.1) + i * 11;
+      if (long) { el('line', { 'class': 'tread', x1: s, y1: b.y + 6, x2: s, y2: b.y + b.h - 6 }, fg); }
+      else { el('line', { 'class': 'tread', x1: b.x + 6, y1: s, x2: b.x + b.w - 6, y2: s }, fg); }
+    }
+    var a = long ? [b.x + b.w * 0.12, b.y + b.h / 2, b.x + b.w * 0.88, b.y + b.h / 2] : [b.x + b.w / 2, b.y + b.h * 0.88, b.x + b.w / 2, b.y + b.h * 0.12];
+    el('line', { 'class': 'stair-arrow', x1: a[0], y1: a[1], x2: a[2], y2: a[3], 'marker-end': 'url(#arrow)' }, fg);
+  }
+
+  function drawCars(g, r) {
+    var fg = el('g', { 'class': 'furn' }, g);
+    r.cars.forEach(function (c) {
+      var x = c[0] + 5, y = c[1] + 5, w = c[2] - 10, hh = c[3] - 10;
+      el('rect', { 'class': 'car', x: x, y: y, width: w, height: hh }, fg);
+      el('path', { 'class': 'car', d: 'M' + x + ' ' + y + 'L' + (x + w) + ' ' + (y + hh) + 'M' + (x + w) + ' ' + y + 'L' + x + ' ' + (y + hh) }, fg);
+    });
+  }
+
+  function drawRestroomIcon(g, r) {
+    var b = r._box, cx = b.x + b.w / 2, cy = b.y + b.h / 2 + 26, fg = el('g', { 'class': 'wc', transform: 'translate(' + cx + ' ' + cy + ')' }, g);
+    [-12, 12].forEach(function (dx, i) {
+      el('circle', { cx: dx, cy: -14, r: 4.5 }, fg);
+      el('path', { d: i ? 'M' + (dx - 7) + ' 10 L' + dx + ' -8 L' + (dx + 7) + ' 10Z' : 'M' + (dx - 5) + ' -8 h10 v18 h-10Z' }, fg);
+    });
+  }
+
   function draw() {
     var defs = el('defs', {}, svg);
-    var pat = el('pattern', { id: 'dots', width: 24, height: 24, patternUnits: 'userSpaceOnUse' }, defs);
-    el('circle', { 'class': 'dot', cx: 1.5, cy: 1.5, r: 1.1 }, pat);
-    var f = el('filter', { id: 'lift', x: '-10%', y: '-10%', width: '120%', height: '130%' }, defs);
-    el('feDropShadow', { dx: 0, dy: 5, stdDeviation: 7, 'flood-color': '#000', 'flood-opacity': 0.14 }, f);
-    el('rect', { x: -600, y: -600, width: 2400, height: 2200, 'class': 'bgrid' }, svg);
+    var pat = el('pattern', { id: 'dots', width: 48, height: 48, patternUnits: 'userSpaceOnUse' }, defs);
+    el('circle', { 'class': 'dot', cx: 2, cy: 2, r: 2 }, pat);
+    var f = el('filter', { id: 'lift', x: '-5%', y: '-5%', width: '110%', height: '115%' }, defs);
+    el('feDropShadow', { dx: 0, dy: 10, stdDeviation: 14, 'flood-color': '#000', 'flood-opacity': 0.16 }, f);
+    var mk = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 6, refY: 5, markerWidth: 5, markerHeight: 5, orient: 'auto-start-reverse' }, defs);
+    el('path', { d: 'M0 0L10 5L0 10z', 'class': 'arrowhead' }, mk);
+    el('rect', { x: -1500, y: -1500, width: 6000, height: 5000, 'class': 'bgrid' }, svg);
 
-    SHELLS.forEach(function (s) { el('rect', { x: s[0], y: s[1], width: s[2], height: s[3], rx: 8, 'class': 'shell' }, svg); });
-    el('text', { x: SHELLS[0][0] + 2, y: SHELLS[0][1] - 8, 'class': 'wing' }, svg).textContent = 'SOUTH WING';
-    el('text', { x: SHELLS[3][0] + 2, y: SHELLS[3][1] - 8, 'class': 'wing' }, svg).textContent = 'NORTH WING';
+    // Outside walls, buttresses and the building floor.
+    var shell = el('g', { 'class': 'shellg' }, svg);
+    OUTLINES.forEach(function (o) { drawPiers(shell, o.points); });
+    OUTLINES.forEach(function (o) { el('polygon', { 'class': 'bwall', points: ptsAttr(o.points) }, shell); });
+    var w0 = OUTLINES[0], w1 = OUTLINES[1];
+    if (w0) { el('text', { x: boxOf(w0.points).x, y: boxOf(w0.points).y + 225, 'class': 'wing' }, svg).textContent = 'SOUTH WING'; }
+    if (w1) { el('text', { x: boxOf(w1.points).x + 4, y: boxOf(w1.points).y - 16, 'class': 'wing' }, svg).textContent = 'NORTH WING'; }
 
+    // Small unlabelled-in-search rooms (storage, vending...).
+    FIXTURES.forEach(function (fx) {
+      el('polygon', { 'class': 'fix', points: ptsAttr(fx.shape) }, svg);
+      var b = boxOf(fx.shape);
+      el('text', { 'class': 'fixl', x: b.x + b.w / 2, y: b.y + b.h / 2 + 4, 'text-anchor': 'middle' }, svg).textContent = fx.label;
+    });
+
+    var doorLayer;
     ROOMS.forEach(function (r) {
       var g = el('g', { 'class': 'room t-' + r.type, 'data-id': r.id, tabindex: 0, role: 'button', 'aria-label': r.name }, svg);
-      el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 4 }, g);
+      el('polygon', { 'class': 'shape', points: ptsAttr(r.shape) }, g);
+      (r.partitions || []).forEach(function (p) { el('line', { 'class': 'part', x1: p[0], y1: p[1], x2: p[2], y2: p[3] }, g); });
+      if (r.seating) { drawSeating(g, r); }
+      if (r.stair) { drawStair(g, r); }
+      if (r.cars) { drawCars(g, r); }
+      if (r.restroom) { drawRestroomIcon(g, r); }
       var lines = String(labelFor(r)).split('\n');
-      var cx = r.x + r.w / 2;
-      var t = el('text', { x: cx, y: r.y + r.h / 2 - (lines.length - 1) * 5.5 + 3.6, 'text-anchor': 'middle' }, g);
-      lines.forEach(function (ln, i) { el('tspan', { x: cx, dy: i ? 11.5 : 0 }, t).textContent = ln; });
+      var cx = r._box.x + r._box.w / 2, cy = r._box.y + r._box.h / 2 - (r.restroom ? 14 : 0);
+      var t = el('text', { 'class': 'rlabel', x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central' }, g);
+      lines.forEach(function (ln, i) { el('tspan', { x: cx, dy: i ? '1.15em' : (-(lines.length - 1) * 0.575) + 'em' }, t).textContent = ln; });
+      // Labels of very small rooms only show when zoomed in (or when the room is selected).
+      if (r._box.w < 70 || r._box.h < 45) { t.classList.add('tiny'); }
       el('title', {}, g).textContent = r.name;
       roomEls[r.id] = g;
     });
+
+    // Doors on top of every wall, so a neighbour's wall never covers a door gap.
+    doorLayer = el('g', { 'class': 'doors', 'aria-hidden': 'true' }, svg);
+    ROOMS.forEach(function (r) { (r.doors || []).forEach(function (d) { drawDoor(doorLayer, r.shape, d, 22); }); });
+    // Entrance doorways: a gap in the outside wall.
+    ENTRANCES.forEach(function (en) {
+      var best = null;
+      OUTLINES.forEach(function (o) { var w = nearestWall(o.points, [en.x, en.y]); if (w && (!best || w.d < best.d)) { best = w; } });
+      if (best && best.d < 40) {
+        el('line', { 'class': 'entry-gap', x1: best.x - best.ux * 20, y1: best.y - best.uy * 20, x2: best.x + best.ux * 20, y2: best.y + best.uy * 20 }, doorLayer);
+      }
+    });
+    PILLARS.forEach(function (p) { el('rect', { 'class': 'pillar', x: p[0] - 10, y: p[1] - 10, width: 20, height: 20, rx: 3 }, svg); });
 
     layerNet = el('g', { id: 'layer-net', 'aria-hidden': 'true' }, svg);
     layerRoute = el('g', { id: 'layer-route', 'aria-hidden': 'true' }, svg);
@@ -461,7 +656,7 @@ dd.none{color:var(--muted)}
       el('path', { 'class': 'eico', d: 'M-5.500 0h8M-0.500 -3.500l3.500 3.500-3.500 3.500M4 -5.500v11' }, mk);
       // The name tag sits below the dot (above it near the bottom edge) and leans away from the map edges.
       var tw = en.name.length * 6 + 18;
-      var tx = en.x > 900 ? -tw + 14 : (en.x < 100 ? -14 : -tw / 2);
+      var tx = en.x > FULL.x + FULL.w * 0.85 ? -tw + 14 : (en.x < FULL.x + FULL.w * 0.15 ? -14 : -tw / 2);
       var ty = en.y > 650 ? -34 : 17;
       var tag = el('g', { 'class': 'etag' }, mk);
       el('rect', { x: tx, y: ty, width: tw, height: 20, rx: 10 }, tag);
@@ -480,10 +675,10 @@ dd.none{color:var(--muted)}
       if (a && b) { el('line', { 'class': 'net-edge' + (e.guess ? ' guess' : ''), x1: a.x, y1: a.y, x2: b.x, y2: b.y }, layerNet); }
     });
     PATHS.nodes.forEach(function (n) {
-      var c = el('circle', { 'class': 'net-node' + (n.guess ? ' guess' : ''), cx: n.x, cy: n.y, r: 3.2 }, layerNet);
+      var c = el('circle', { 'class': 'net-node' + (n.guess ? ' guess' : ''), cx: n.x, cy: n.y, r: 7 }, layerNet);
       el('title', {}, c).textContent = n.id + ': ' + (n.name || '');
     });
-    ROOMS.forEach(function (r) { (r.doors || []).forEach(function (d) { el('circle', { 'class': 'net-door', cx: d[0], cy: d[1], r: 2.8 }, layerNet); }); });
+    ROOMS.forEach(function (r) { (r.doors || []).forEach(function (d) { el('circle', { 'class': 'net-door', cx: d[0], cy: d[1], r: 6 }, layerNet); }); });
   }
 
   function drawRoute() {
@@ -505,7 +700,7 @@ dd.none{color:var(--muted)}
   function ratio() { var w = svg.clientWidth, hh = svg.clientHeight; return (w && hh) ? hh / w : FULL.h / FULL.w; }
   function allW() { return Math.max(FULL.w, FULL.h / ratio()); }
   function clampView(v) {
-    v.w = Math.max(130, Math.min(allW() * 1.05, v.w));
+    v.w = Math.max(300, Math.min(allW() * 1.05, v.w));
     v.cx = Math.max(FULL.x, Math.min(FULL.x + FULL.w, v.cx));
     v.cy = Math.max(FULL.y, Math.min(FULL.y + FULL.h, v.cy));
     return v;
@@ -513,7 +708,7 @@ dd.none{color:var(--muted)}
   function applyView() {
     var w = view.w, hh = w * ratio();
     svg.setAttribute('viewBox', (view.cx - w / 2) + ' ' + (view.cy - hh / 2) + ' ' + w + ' ' + hh);
-    svg.classList.toggle('z-in', w < 560);
+    svg.classList.toggle('z-in', w < 1300);
     // Units per screen pixel. Markers and the route line use it to stay the same size on screen.
     if (svg.clientWidth) { svg.style.setProperty('--u', (w / svg.clientWidth).toFixed(4)); }
   }
@@ -533,7 +728,7 @@ dd.none{color:var(--muted)}
   function zoomBy(f, px, py) {
     if (px == null) { px = view.cx; py = view.cy; }
     cancelAnimationFrame(anim);
-    var nw = Math.max(130, Math.min(allW() * 1.05, view.w * f)), k = nw / view.w;
+    var nw = Math.max(300, Math.min(allW() * 1.05, view.w * f)), k = nw / view.w;
     view = clampView({ cx: px - (px - view.cx) * k, cy: py - (py - view.cy) * k, w: nw });
     applyView();
   }
@@ -551,13 +746,13 @@ dd.none{color:var(--muted)}
     }
     if (sel) {
       var o = sel.o;
-      if (sel.kind === 'room') { grow(o.x, o.y, o.x + o.w, o.y + o.h); } else { grow(o.x - 20, o.y - 20, o.x + 20, o.y + 20); }
+      if (sel.kind === 'room') { grow(o._box.x, o._box.y, o._box.x + o._box.w, o._box.y + o._box.h); } else { grow(o.x - 50, o.y - 50, o.x + 50, o.y + 50); }
     }
     if (route) { route.points.forEach(function (p) { grow(p[0], p[1], p[0], p[1]); }); }
-    else if (from) { var en = entranceById(from); grow(en.x - 60, en.y - 60, en.x + 60, en.y + 60); }
+    else if (from) { var en = entranceById(from); grow(en.x - 150, en.y - 150, en.x + 150, en.y + 150); }
     if (!b) { return; }
-    var pad = route ? 70 : 90, bw = b[2] - b[0] + pad * 2, bh = b[3] - b[1] + pad * 2;
-    goTo({ cx: (b[0] + b[2]) / 2, cy: (b[1] + b[3]) / 2, w: Math.max(bw, bh / ratio(), route ? 380 : 340) }, true);
+    var pad = route ? 150 : 210, bw = b[2] - b[0] + pad * 2, bh = b[3] - b[1] + pad * 2;
+    goTo({ cx: (b[0] + b[2]) / 2, cy: (b[1] + b[3]) / 2, w: Math.max(bw, bh / ratio(), route ? 850 : 780) }, true);
   }
 
   // ---------- Search ----------
@@ -651,6 +846,7 @@ dd.none{color:var(--muted)}
     var badges = h('div', { 'class': 'badges' });
     if (viaQuick) { badges.appendChild(h('span', { 'class': 'badge info', text: 'Nearest ' + viaQuick }));}
     if (accessible) { badges.appendChild(h('span', { 'class': 'badge ok', text: 'Step-free' })); }
+    if (route.outdoor) { badges.appendChild(h('span', { 'class': 'badge info', text: 'Goes outside' })); }
     if (route.usesGuess) { badges.appendChild(h('span', { 'class': 'badge warn', text: 'Includes unchecked hallway' })); }
     box.appendChild(badges);
 
@@ -660,7 +856,7 @@ dd.none{color:var(--muted)}
       var ic = s.kind === 'start' ? 'start' : (s.kind === 'arrive' ? 'arrive' : name);
       ol.appendChild(h('li', { 'class': 'step ' + s.kind }, [
         icon(ic),
-        h('span', { 'class': 'txt', text: s.text }),
+        h('span', { 'class': 'txt' }, [s.text, s.outdoor ? h('span', { 'class': 'tag', text: 'Outside' }) : null]),
         h('span', { 'class': 'ft', text: s.feet ? s.feet + ' ft' : '' })
       ]));
     });
@@ -887,7 +1083,7 @@ dd.none{color:var(--muted)}
     ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
     if (pinch && count() === 2) {
       var m = mid(), r = svg.getBoundingClientRect();
-      var w = Math.max(130, Math.min(allW() * 1.05, pinch.w * pinch.d / Math.max(m.d, 1)));
+      var w = Math.max(300, Math.min(allW() * 1.05, pinch.w * pinch.d / Math.max(m.d, 1)));
       view = clampView({
         w: w,
         cx: pinch.at.x - ((m.x - r.left) / r.width - 0.5) * w,

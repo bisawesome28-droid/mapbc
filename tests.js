@@ -98,14 +98,14 @@ test('route starts at the entrance and ends at the room door', function () {
 
 test('west door to S04 stays in the south wing (no bridge)', function () {
   var r = go('E-S-WEST', 'S04');
-  assert.ok(!passesNode(r, 's_bridge_s'), 'route went to the bridge');
+  assert.ok(!passesNode(r, 'walk_s'), 'route went to the walkway');
   assert.ok(r.names.indexOf('Main hallway (south wing)') > -1, 'route should use the main hallway');
   assert.ok(r.names.join(' ').indexOf('north wing') === -1, 'route went into the north wing');
 });
 
-test('north wing south entry to S11 crosses the connector bridge', function () {
+test('north wing south entry to S11 uses the outdoor walkway', function () {
   var r = go('E-N-SOUTH', 'S11');
-  assert.ok(passesNode(r, 'n_bridge_n') && passesNode(r, 's_bridge_s'));
+  assert.ok(passesNode(r, 'walk_n') && passesNode(r, 'walk_s'));
 });
 
 test('a room with two doors uses the closer one (S11 from the north entry)', function () {
@@ -260,6 +260,57 @@ test('nearest picks the closest restroom for each wing', function () {
   var fromNorth = ML.nearest(graph, 'E-N-SOUTH', rests.map(function (o) { return { kind: 'room', o: o }; }));
   assert.strictEqual(fromSouth.target.o.id, 'S-REST');
   assert.strictEqual(fromNorth.target.o.id, 'N-REST');
+});
+
+// ---------- Drawing data and the outdoor walkway ----------
+
+function inside(pt, poly) {
+  var c = false;
+  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    var a = poly[i], b = poly[j];
+    if ((a[1] > pt[1]) !== (b[1] > pt[1]) && pt[0] < (b[0] - a[0]) * (pt[1] - a[1]) / (b[1] - a[1]) + a[0]) { c = !c; }
+  }
+  return c;
+}
+function distToOutline(pt, poly) {
+  var best = Infinity;
+  for (var i = 0; i < poly.length; i++) {
+    var a = poly[i], b = poly[(i + 1) % poly.length];
+    var dx = b[0] - a[0], dy = b[1] - a[1], len2 = dx * dx + dy * dy;
+    var t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / len2));
+    best = Math.min(best, Math.hypot(pt[0] - a[0] - t * dx, pt[1] - a[1] - t * dy));
+  }
+  return best;
+}
+
+test('every room has an outline and each door sits on (or next to) its own wall', function () {
+  D.ROOMS.forEach(function (r) {
+    assert.ok(r.shape && r.shape.length >= 3, r.id + ' has no shape');
+    r.doors.forEach(function (d) {
+      var gap = distToOutline(d, r.shape);
+      // Open areas (lobby, cafe, walkway, service corridor) use a point inside instead of a wall door.
+      var openArea = r.type === 'common' || r.type === 'connector' || r.id === 'N-SVC-ENT';
+      assert.ok(gap <= 2 || (openArea && inside(d, r.shape)), r.id + ' door ' + d + ' is ' + Math.round(gap) + ' units from its wall');
+    });
+  });
+});
+
+test('every room sits inside its wing outline (except the outdoor walkway)', function () {
+  D.ROOMS.forEach(function (r) {
+    if (r.type === 'connector') { return; }
+    var wing = D.OUTLINES.filter(function (o) { return o.wing === r.wing; })[0];
+    r.shape.forEach(function (p) {
+      assert.ok(inside(p, wing.points) || distToOutline(p, wing.points) < 25, r.id + ' corner ' + p + ' is outside the ' + r.wing + ' wing');
+    });
+  });
+});
+
+test('crossing between wings is flagged as outdoors on Level 1', function () {
+  var r = go('E-S-WEST', 'N03');
+  assert.ok(r.outdoor, 'south to north wing should go outside');
+  var d = ML.describe(graph, r, 'N03', { feetPerUnit: D.SCALE.feetPerUnit });
+  assert.ok(d.steps.some(function (s) { return s.outdoor && /outside/.test(s.text); }), 'a step should say outside');
+  assert.ok(!go('E-S-WEST', 'S03').outdoor, 'staying in one wing is indoors');
 });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
