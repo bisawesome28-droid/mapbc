@@ -1,5 +1,77 @@
 # BC Campus Map: handoff notes
 
+## Read this first: what the latest session did (Oct 15, 2026)
+Branch `campus-map` holds everything from this session (it includes the earlier `gps-blue-dot` branch, merged in). Check out
+this branch. `node tests.js` should say 53 passed, 0 failed. Three pieces of work were added on top of the Stokes Level 1 indoor map:
+
+1. **GPS blue dot inside the indoor map (index.html).** A crosshair "Locate me" button, a blue dot with an accuracy ring, and a
+   "Start there" prompt for the nearest entrance. Built, tested in a headless browser with a pretend location, **never tested with
+   real GPS on a phone**, and **not usable until calibrated** (see "GPS blue dot" below).
+2. **Outdoor campus map (campus.html).** A MapLibre map of the campus with building search, tap-a-building, an "Open indoor map" button,
+   entrances, walking paths and the phone's own blue dot. **It has no BC data yet**: the three data files are empty placeholders.
+   The data comes from an OpenStreetMap export that the owner has to run himself (details below).
+3. **OSM import tool (tools/osm_to_campus.js).** Turns that export into the three data files and prints a coverage report.
+
+### Who and why
+Brandon (BC student) and a friend are building a campus map app. The goal: a big outdoor campus map, tap into a building to see its
+indoor floor plans, accurate names, search, routing, and eventually which floor you are on. They want it to scale to other colleges
+and plan to pitch schools to supply their own floor plans. Stokes Hall Level 1 is the proof of concept. They plan a real app later
+(a website is fine for now). Indoor content is a basic layout (room numbers, stairs, elevators, accessibility), no emergency content.
+
+### New files
+- `campus.html`: the outdoor map page. Loads MapLibre GL JS 5 from unpkg.com, reads `campus/config.js` and the three `campus/*.geojson` files with `fetch`.
+  It must be served over http (`python3 -m http.server 8000`, then http://localhost:8000/campus.html). It will not load data from `file://` and says so on screen.
+- `campus/config.js`: `window.CAMPUS` with `center` as **[longitude, latitude]**, `zoom`, `indoor` (building name to indoor page, matched by name, case-insensitive, partial is fine), `basemap`.
+- `campus/buildings.geojson`, `paths.geojson`, `entrances.geojson`: empty FeatureCollections until the import is run. Properties are written by the import (see the tool header), plus `uid` and `hasIndoor` added by the page at load.
+- `campus/README.md`: the step-by-step for the owner (Overpass Turbo export, import, run, fix data, before-launch checklist).
+- `tools/osm_to_campus.js`: `node tools/osm_to_campus.js campus/osm_export.geojson`. Exports `convert()` so tests can call it.
+- Changed: `logic.js` (GPS functions), `index.html` (locate button, blue dot, `?sim=1`), `data.js` (empty `window.GEO`), `tests.js` (15 new tests).
+
+### How the pieces work
+- **Indoor coordinates vs real coordinates.** The indoor plan is a picture. `data.js` x/y are pixel positions on the brochure image (2722 x 1812), not
+  lat/lng. Everything outdoors (GeoJSON, MapLibre, GPS) is lat/lng, and GeoJSON order is **[lng, lat]**. Mixing these up is the most likely bug.
+  `window.GEO.points` in data.js are control points with both (`x`, `y`, `lat`, `lng`) that connect the two worlds.
+- **`ML.fitGeo(points)` (logic.js).** Least-squares fit of a move + turn + resize (no stretching, since the plan is drawn to scale) from 2 or more control points.
+  Returns `toMap(lat,lng)`, `toGeo(x,y)`, `unitsPerMeter`, `rotationDeg`, and with 3+ points `rmsMeters`, `worstMeters`, `worstIndex` (to spot a typo). Returns null for fewer than 2 usable points.
+- **`ML.createSmoother({speed})`.** Accuracy-weighted smoothing of GPS readings in map units. A reading with a small error moves the dot a lot, a poor one barely moves it,
+  and the allowed drift grows with time since the last reading (speed = walking pace in map units per second).
+- **`ML.describeFix(pos, ctx)`.** Given `{x,y,accuracy(m)}` and `{metersPerUnit, bounds, entrances}`, returns the ring radius in map units, whether you are on the plan,
+  how far off it you are, and the nearest entrance. The page's "Start there" prompt uses this.
+- **Indoor dot behaviour (index.html).** `watchPosition` feeds `onFix`, which converts with `geo.toMap`, smooths, then `setYou`. The dot shows only on Level 1 (`you.level` is hard-coded to "1"
+  because GPS cannot tell floors apart). Outside the plan it says how far away you are and draws nothing. If `geo` is null the button explains that the map is not calibrated.
+  `?sim=1` lets you tap the map to place a pretend location (accuracy fixed at 8 m) and needs no GPS or calibration. This is what the headless test used.
+- **Outdoor blue dot (campus.html)** is MapLibre's built-in `GeolocateControl`. It works from lat/lng directly and needs no calibration. It is separate from the indoor dot on purpose.
+- **Outdoor to indoor handoff.** Tapping a building whose name matches a key in `CAMPUS.indoor` shows "Open indoor map", which just links to that page. Matching buildings are drawn maroon.
+- **The importer** keeps polygons with a `building` tag, line features whose `highway` is walkable (roads for cars are dropped), and points with an `entrance` tag. It rounds to 7 decimals,
+  sorts named buildings first, and prints how many buildings are unnamed and how few entrances exist.
+
+### What is verified, and what is not
+Verified: `node tests.js` (53 pass). The indoor page in headless Chromium with `?sim=1` (dot, ring, nearest-entrance prompt, level 2 hides the dot, Hide clears it).
+`campus.html` in headless Chromium with made-up buildings (search, select, open-indoor button, close, entrance dot, dashed steps, geolocate button present, phone width layout).
+Not verified: real GPS on a phone, any real BC data, whether OpenStreetMap tiles and the demo font server load for real users (the sandbox had no access to them, so the
+screenshots had a blank base map), how complete OpenStreetMap is for BC, and the campus center in `config.js` (an approximate guess, about 42.3355, -71.1685).
+The sandbox could not reach OpenStreetMap's data services (Overpass and Nominatim refuse automated fetches), which is why the owner runs the export himself.
+
+### Suggested next tasks (roughly in order)
+1. **Import the data.** Owner runs the Overpass export, then `node tools/osm_to_campus.js ...`. Read the report and decide what to fix. Fix names, missing entrances and paths in the geojson files
+   (or in OpenStreetMap itself). Expect entrances to be sparse. BC is hilly, so record `incline` and `steps` where known.
+2. **Calibrate GPS for Stokes.** Fill `GEO.points` with 3 or 4 far-apart corners from the list in "GPS blue dot" below. Run `node tests.js` and fix any point it flags. Then walk outside Stokes on an https page and check the dot.
+   The fitted scale also fixes the guessed `SCALE.feetPerUnit` (the test compares them once `SCALE.guess` is false).
+3. **Show the Stokes plan on the campus map.** With calibration done, write a small script that converts the Stokes outlines and room shapes to GeoJSON using `fitGeo(...).toGeo`,
+   and draw them in campus.html when zoomed in (hide the plain building polygon then). This is how every indoor map should join the outdoor one, so make the script generic per building.
+4. **Outdoor routing.** Build a graph from `paths.geojson` and `entrances.geojson` and reuse the search in `logic.js`. Note `buildGraph` and `shortest` assume map units, so use
+   metres (haversine) for lat/lng data. Join outdoor and indoor at entrances (an entrance id in both worlds). Add a step-free option using `steps`, `incline`, `wheelchair`.
+5. **Floor detection** (discussed, not built). Plan: barometer for relative floor change, reset at entrances that have a known floor (BC buildings can have entrances on different levels, so tag the floor per entrance),
+   use accelerometer to confirm stairs or an elevator ride, and ask the user to confirm when unsure. Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons need hardware, which hurts the scale-to-any-college goal.
+6. **Before real users:** replace the OpenStreetMap public tiles (their policy is for light use), for example with self-hosted Protomaps/PMTiles; bundle MapLibre instead of loading from unpkg; add dark mode to campus.html; keep the OpenStreetMap credit.
+
+### Gotchas
+- `tests.js` creates a fake `window` and `require`s `data.js` and `campus/config.js`. New data files should write to `window.*` the same way, and `logic.js` has no DOM code, so keep it that way.
+- Lat/lng order differs between tools: GeoJSON and MapLibre use [lng, lat], Google Maps shows lat, lng, and `GEO.points` uses named `lat` and `lng`. A test checks that `CAMPUS.center` is plausible for Massachusetts.
+- Re-running the importer overwrites the three geojson files, so hand edits should come after the import is final.
+- The brochure image is not in the repo on purpose (see "Current state").
+- The owner prefers plain, direct explanations organized under clear headings.
+
 ## What's here
 - index.html: the map page, drawn like an architect's floor plan (walls, doors, stairs, seating). Open it in a browser. No server or build step needed.
 - data.js: everything the map shows (rooms, doors, entrances, hallway network). Most changes happen here.
@@ -7,6 +79,7 @@
 - tests.js: run `node tests.js` to check search and routing. Run it after every data.js edit.
 - rooms.csv: spreadsheet template for real room data (door numbers, landmarks, verified flag).
 - pipeline_prototype/: optional prototype that finds rooms in a color-coded floor plan image.
+- campus.html, campus/, tools/: the outdoor campus map and the OpenStreetMap import (see "Read this first" above).
 
 ## What works now
 - Search a room (placeholder id, real room number, or words like "restrooms"). It highlights and zooms in.
