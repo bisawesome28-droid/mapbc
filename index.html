@@ -2,146 +2,333 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Stokes Hall map</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stokes Hall indoor map</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238c1d2f'/%3E%3Cpath d='M16 6a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z' fill='white'/%3E%3Ccircle cx='16' cy='13' r='2.6' fill='%238c1d2f'/%3E%3C/svg%3E">
 <style>
 :root{
-  --bg:#ffffff;--fg:#1c1c1a;--muted:#6b6a65;--line:#d8d6ce;--card:#f6f5f1;
-  --accent:#7b1e2b;--accent-bg:#f3dde0;--shell:#faf9f6;
-  --c-classroom:#ecc3b3;--c-office:#f2de9b;--c-service:#f1be86;--c-it:#d3d0a0;
-  --c-common:#cadceb;--c-core:#dedcd4;--c-conf:#ebc6d6;--c-connector:#efede6;
-  --entr:#1f6f43;--entr-fg:#ffffff;--route:#1d5fbf;--guess:#c46a00;--net:#5d6b7a;
+  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --bg:#e9edf3;--surface:#ffffff;--surface2:#f4f6fa;--fg:#0f1722;--muted:#5b6678;--line:#dde2ea;
+  --accent:#8c1d2f;--accent-soft:#f8e4e8;
+  --route:#0a6cff;--route-soft:#e4efff;
+  --ok:#12804d;--ok-soft:#dff4e8;--warn:#9a5a06;--warn-soft:#fcefd2;
+  --map:#f3f6fb;--shell:#ffffff;--shell-line:#cfd6e2;--grid:#cdd4e0;
+  --c-classroom:#f4cfc7;--c-office:#f7e7ab;--c-service:#f8cb98;--c-it:#ddddab;
+  --c-common:#cfe4f6;--c-core:#e1e5ec;--c-conf:#f0cfe1;--c-connector:#edf0f5;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 10px 30px rgba(16,24,40,.08);
+  color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
-  :root{
-    --bg:#1b1b19;--fg:#ecebe6;--muted:#a3a29b;--line:#3d3c38;--card:#262624;
-    --accent:#e08a97;--accent-bg:#4a2229;--shell:#232321;
-    --c-classroom:#6d3a2c;--c-office:#6a5a1e;--c-service:#75481a;--c-it:#55532a;
-    --c-common:#2f4a63;--c-core:#44433f;--c-conf:#64334a;--c-connector:#34332f;
-    --entr:#6fcf97;--entr-fg:#10261a;--route:#7fb0ff;--guess:#f0a050;--net:#9aa8b6;
+  :root:not([data-theme=light]){
+    --bg:#070a0f;--surface:#111821;--surface2:#18212c;--fg:#e8edf5;--muted:#95a2b5;--line:#243040;
+    --accent:#f08a9b;--accent-soft:#3a1d26;
+    --route:#4db3ff;--route-soft:#12293f;
+    --ok:#5fd39b;--ok-soft:#10301f;--warn:#f2b55d;--warn-soft:#352610;
+    --map:#0a0f16;--shell:#0f1620;--shell-line:#263446;--grid:#1a2331;
+    --c-classroom:#4d2931;--c-office:#4b4421;--c-service:#58391d;--c-it:#40432a;
+    --c-common:#1f3b54;--c-core:#27303b;--c-conf:#4b2b40;--c-connector:#1b222c;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+    color-scheme:dark;
   }
 }
+:root[data-theme=dark]{
+  --bg:#070a0f;--surface:#111821;--surface2:#18212c;--fg:#e8edf5;--muted:#95a2b5;--line:#243040;
+  --accent:#f08a9b;--accent-soft:#3a1d26;
+  --route:#4db3ff;--route-soft:#12293f;
+  --ok:#5fd39b;--ok-soft:#10301f;--warn:#f2b55d;--warn-soft:#352610;
+  --map:#0a0f16;--shell:#0f1620;--shell-line:#263446;--grid:#1a2331;
+  --c-classroom:#4d2931;--c-office:#4b4421;--c-service:#58391d;--c-it:#40432a;
+  --c-common:#1f3b54;--c-core:#27303b;--c-conf:#4b2b40;--c-connector:#1b222c;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:980px;margin:0 auto;padding:16px}
-h1{font-size:22px;font-weight:600;margin:0}
-h2{font-size:17px;font-weight:600;margin:0 0 6px}
-.sub{color:var(--muted);font-size:14px;margin:2px 0 14px}
-input[type=search]{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
-input[type=search]:focus{outline:2px solid var(--accent);outline-offset:1px}
-button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
-button:hover{border-color:var(--muted)}
-#results{margin:8px 0 0;display:flex;flex-direction:column;gap:4px}
-#results button{text-align:left;display:flex;justify-content:space-between;gap:12px}
-#results .meta{color:var(--muted);font-size:13px}
-#results .none{color:var(--muted);font-size:14px;padding:4px 2px}
-#legend{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
-#legend button{display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 9px}
-#legend button[aria-pressed=false]{opacity:.45}
-.sw{width:12px;height:12px;border-radius:3px;border:1px solid var(--line);display:inline-block}
-.mapwrap{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}
-#map{display:block;width:100%;height:auto;touch-action:none;cursor:grab;user-select:none}
-.zoom{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px}
-.zoom button{width:36px;height:36px;padding:0;font-size:18px;line-height:1}
-.zoom .reset{font-size:12px}
-.shell{fill:var(--shell);stroke:var(--line);stroke-width:1}
-.room rect{stroke:var(--line);stroke-width:1}
-.room text{font-size:10px;fill:var(--fg);pointer-events:none}
-.room{cursor:pointer;transition:opacity .15s}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--font);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--route);outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.ico{display:inline-grid;place-items:center;flex:none}
+.ico svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- Layout ---------- */
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;height:60px;padding:0 20px;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--accent);color:#fff;display:grid;place-items:center}
+.logo .ico{width:20px;height:20px}
+.logo svg{fill:#fff;stroke:none}
+.brand{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.brand b{font-size:17px;letter-spacing:-.01em}
+.brand span{font-size:12px;color:var(--muted)}
+.pill{font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--surface2);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.hot{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.spacer{flex:1}
+.iconbtn{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--muted)}
+.iconbtn:hover{color:var(--fg);border-color:var(--muted)}
+.iconbtn .ico{width:19px;height:19px}
+
+.layout{display:grid;grid-template-columns:minmax(360px,430px) 1fr;height:calc(100vh - 60px);height:calc(100dvh - 60px)}
+.side{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.stage{position:relative;padding:16px 16px 16px 0;min-height:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
+.card h2{margin:0;font-size:17px;letter-spacing:-.01em}
+.card h3{margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+
+@media (max-width:899px){
+  .layout{display:flex;flex-direction:column;height:auto;padding:12px;gap:12px}
+  .side{display:contents}
+  #planner{order:1}.stage{order:2}#routecard{order:3}#detail{order:4}#photo{order:5}#foot{order:6}
+  .stage{padding:0;height:46vh;height:46svh;min-height:300px;max-height:480px}
+  .topbar{padding:0 14px}
+  .hide-sm{display:none}
+}
+
+/* ---------- Planner ---------- */
+.fields{position:relative;display:grid;gap:8px;padding-left:28px}
+.fields::before{content:"";position:absolute;left:7px;top:30px;bottom:30px;border-left:2px dotted var(--muted);opacity:.5}
+.field{position:relative;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:8px 14px 9px;transition:border-color .15s,box-shadow .15s}
+.field:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.field.need{border-color:var(--route);box-shadow:0 0 0 4px var(--route-soft)}
+.field label{display:block;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.field select,.field input{display:block;width:100%;border:0;background:transparent;outline:none;font-size:16px;font-weight:550;padding:3px 0 0;appearance:none;-webkit-appearance:none;text-overflow:ellipsis}
+.field input::placeholder{color:var(--muted);font-weight:400}
+.field .chev{position:absolute;right:12px;bottom:12px;width:16px;height:16px;color:var(--muted);pointer-events:none}
+.pin{position:absolute;left:-27px;top:50%;margin-top:-8px;width:16px;height:16px}
+.pin.from{border-radius:50%;border:4px solid var(--ok);background:var(--surface)}
+.pin.to{background:var(--accent);border-radius:50% 50% 50% 0;transform:rotate(-45deg)}
+.pin.to::after{content:"";position:absolute;inset:4.5px;border-radius:50%;background:var(--surface)}
+
+.results{display:flex;flex-direction:column;gap:2px;margin-top:10px}
+.results:empty{display:none}
+.res{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:12px;padding:8px 10px}
+.res:hover,.res.active{background:var(--surface2);border-color:var(--line)}
+.res .sw{width:28px;height:28px;border-radius:9px;flex:none;border:1px solid color-mix(in srgb,var(--fg) 14%,transparent)}
+.res .t{flex:1;min-width:0}
+.res .t b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res .t small{color:var(--muted);font-size:12.5px}
+.res kbd{font:600 11px var(--font);color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px;display:none}
+.res.active kbd{display:block}
+.noneline{color:var(--muted);font-size:14px;padding:6px 4px}
+.quick{display:flex;flex-wrap:nowrap;align-items:center;gap:5px;margin-top:12px;overflow-x:auto;scrollbar-width:none}
+.quick::-webkit-scrollbar{display:none}
+.quick span{font-size:12px;color:var(--muted);flex:none}
+.chip{flex:none;white-space:nowrap;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 9px;font-size:13px;font-weight:550}
+.chip:hover{border-color:var(--muted);background:var(--surface2)}
+.switch{display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);cursor:pointer;position:relative}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch .track{flex:none;width:42px;height:25px;border-radius:99px;background:var(--line);position:relative;transition:background .2s}
+.switch .track::after{content:"";position:absolute;left:3px;top:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.switch input:checked + .track{background:var(--route)}
+.switch input:checked + .track::after{transform:translateX(17px)}
+.switch input:focus-visible + .track{outline:2px solid var(--route);outline-offset:2px}
+.switch .lbl b{display:block;font-weight:600;font-size:14.5px}
+.switch .lbl small{color:var(--muted);font-size:12.5px}
+
+/* ---------- Route card ---------- */
+.empty{display:flex;gap:14px;align-items:flex-start}
+.empty .bigico{width:44px;height:44px;border-radius:14px;background:var(--route-soft);color:var(--route);display:grid;place-items:center;flex:none}
+.empty .bigico .ico{width:24px;height:24px}
+.empty p{margin:3px 0 0;color:var(--muted);font-size:14px}
+.hintlist{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px}
+.hintlist li{display:flex;gap:10px;align-items:center;font-size:14px}
+.hintlist i{font-style:normal;width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted);flex:none}
+.sum{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.sum .big{font-size:38px;line-height:1;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.sum .big small{font-size:16px;font-weight:600;color:var(--muted);letter-spacing:0;margin-left:3px}
+.sum .dist{color:var(--muted);font-size:15px;padding-bottom:3px;font-variant-numeric:tabular-nums}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 4px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--surface2);border:1px solid var(--line);color:var(--muted)}
+.badge.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.badge.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.badge.info{background:var(--route-soft);color:var(--route);border-color:transparent}
+.steps{list-style:none;margin:14px 0 0;padding:0}
+.step{display:grid;grid-template-columns:34px 1fr auto;gap:12px;position:relative;padding-bottom:14px}
+.step:last-child{padding-bottom:0}
+.step .ico{width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--line);color:var(--fg);padding:7px;position:relative;z-index:1}
+.step:not(:last-child)::before{content:"";position:absolute;left:16px;top:34px;bottom:0;width:2px;background:var(--line)}
+.step.start .ico{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.step.arrive .ico{background:var(--accent);color:#fff;border-color:transparent}
+.step .txt{padding-top:6px;font-weight:550;min-width:0}
+.step .ft{padding-top:7px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:11px;padding:8px 13px;font-size:14px;font-weight:600}
+.btn:hover{border-color:var(--muted);background:var(--surface2)}
+.btn .ico{width:16px;height:16px}
+.fine{margin:12px 0 0;color:var(--muted);font-size:12.5px;line-height:1.45}
+.callout{margin-top:12px;border-radius:12px;padding:10px 12px;font-size:13.5px;background:var(--warn-soft);color:var(--warn)}
+
+/* ---------- Details ---------- */
+.dhead{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.dhead .sw{width:40px;height:40px;border-radius:12px;border:1px solid color-mix(in srgb,var(--fg) 14%,transparent);flex:none}
+.dhead small{display:block;color:var(--muted);font-size:12.5px}
+dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:14px}
+dt{color:var(--muted)}
+dd{margin:0}
+dd.none{color:var(--muted)}
+.photo .ph{border:1.5px dashed var(--line);border-radius:14px;padding:22px 14px;text-align:center;color:var(--muted);font-size:13.5px}
+.photo img{max-width:100%;border-radius:14px;display:block}
+.meter{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin:5px 0 12px}
+.meter i{display:block;height:100%;background:var(--route);border-radius:99px}
+#foot{padding:4px 4px 18px;color:var(--muted);font-size:12.5px}
+#foot .row{display:flex;justify-content:space-between}
+
+/* ---------- Map ---------- */
+.mapwrap{position:relative;height:100%;border-radius:20px;overflow:hidden;background:var(--map);border:1px solid var(--line);box-shadow:var(--shadow)}
+#map{display:block;width:100%;height:100%;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+#map:active{cursor:grabbing}
+.glass{background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
+.zoom{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;overflow:hidden}
+.zoom button{width:40px;height:40px;border:0;background:transparent;font-size:20px;line-height:1;color:var(--fg)}
+.zoom button + button{border-top:1px solid var(--line)}
+.zoom button:hover{background:var(--surface2)}
+.zoom .all{font-size:12px;font-weight:700}
+.maptools{position:absolute;top:12px;left:12px;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100% - 76px)}
+.maptools label{display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.maptools input{accent-color:var(--route);margin:0}
+.netkey{display:none;align-items:center;gap:12px;padding:7px 12px;font-size:12.5px;color:var(--muted)}
+.netkey.on{display:flex}
+.netkey i{display:inline-block;width:20px;height:0;border-top:3px solid var(--muted);vertical-align:middle;margin-right:6px}
+.netkey i.g{border-top:3px dashed #e28a1c}
+.legend{position:absolute;left:12px;bottom:12px;right:12px;display:flex;flex-wrap:wrap;gap:6px;padding:8px}
+.legend button{display:flex;align-items:center;gap:7px;border:1px solid transparent;background:transparent;border-radius:99px;padding:4px 10px 4px 6px;font-size:12.5px;font-weight:550}
+.legend button:hover{background:var(--surface2)}
+.legend button[aria-pressed=false]{opacity:.45;text-decoration:line-through}
+.legend .sw{width:14px;height:14px;border-radius:5px;border:1px solid color-mix(in srgb,var(--fg) 20%,transparent)}
+@media (max-width:899px){
+  .legend{right:12px;left:12px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .legend button{white-space:nowrap}
+}
+
+/* SVG layers */
+.bgrid{fill:url(#dots)}
+.dot{fill:var(--grid)}
+.shell{fill:var(--shell);stroke:var(--shell-line);stroke-width:1.5;filter:url(#lift)}
+.wing{font-size:11px;font-weight:700;letter-spacing:.22em;fill:var(--muted);opacity:.7;pointer-events:none}
+.room{cursor:pointer;transition:opacity .2s}
+.room rect{stroke-width:1;transition:stroke .15s,stroke-width .15s}
+.room text{font-size:10.5px;font-weight:650;fill:var(--fg);pointer-events:none;letter-spacing:.01em}
+.room:hover rect{stroke:var(--fg);stroke-width:1.6}
 .room:focus{outline:none}
-.room:focus rect{stroke:var(--accent);stroke-width:2}
-.t-classroom rect{fill:var(--c-classroom)}
-.t-office rect{fill:var(--c-office)}
-.t-service rect{fill:var(--c-service)}
-.t-it rect{fill:var(--c-it)}
-.t-common rect{fill:var(--c-common)}
-.t-core rect{fill:var(--c-core)}
-.t-conf rect{fill:var(--c-conf)}
-.t-connector rect{fill:var(--c-connector)}
-.room.dim{opacity:.2}
+.room:focus-visible rect{stroke:var(--route);stroke-width:2.5}
+.t-classroom rect{fill:var(--c-classroom);stroke:color-mix(in srgb,var(--c-classroom) 55%,var(--fg))}
+.t-office rect{fill:var(--c-office);stroke:color-mix(in srgb,var(--c-office) 55%,var(--fg))}
+.t-service rect{fill:var(--c-service);stroke:color-mix(in srgb,var(--c-service) 55%,var(--fg))}
+.t-it rect{fill:var(--c-it);stroke:color-mix(in srgb,var(--c-it) 55%,var(--fg))}
+.t-common rect{fill:var(--c-common);stroke:color-mix(in srgb,var(--c-common) 55%,var(--fg))}
+.t-core rect{fill:var(--c-core);stroke:color-mix(in srgb,var(--c-core) 55%,var(--fg))}
+.t-conf rect{fill:var(--c-conf);stroke:color-mix(in srgb,var(--c-conf) 55%,var(--fg))}
+.t-connector rect{fill:var(--c-connector);stroke:color-mix(in srgb,var(--c-connector) 55%,var(--fg));stroke-dasharray:4 3}
+.room.fade{opacity:.5}
+.room.dim{opacity:.12}
 .room.match rect{stroke:var(--accent);stroke-width:2.5}
-.room.sel rect{stroke:var(--accent);stroke-width:3.5}
+.room.sel rect{stroke:var(--accent);stroke-width:3.5;filter:drop-shadow(0 0 7px var(--accent));animation:glow 1.8s ease-in-out infinite}
+.room.sel text{font-weight:800}
+@keyframes glow{50%{stroke-opacity:.45}}
+
+.mk{transform:scale(var(--u,1))}
 .spot{cursor:pointer}
-.spot circle{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
-.spot text{font-size:9px;fill:var(--accent);font-weight:600;pointer-events:none}
+.spot circle{fill:var(--surface);stroke:var(--accent);stroke-width:1.5}
+.spot text{font-size:7.5px;font-weight:800;fill:var(--accent);pointer-events:none}
 .spot.sel circle{stroke-width:3}
 .spot:focus{outline:none}
-.spot:focus circle{stroke-width:3}
-.panel{background:var(--card);border-radius:12px;padding:12px 14px;margin:12px 0}
-.panel dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
-.panel dt{color:var(--muted)}
-.panel dd{margin:0}
-.badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
-.badge.ok{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-.empty{color:var(--muted);font-size:14px}
-.photo img{max-width:100%;border-radius:8px;display:block;margin-top:8px}
-.progress{color:var(--muted);font-size:13px}
-.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
-.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:12px 0 0}
-.controls label{font-size:14px;display:flex;align-items:center;gap:6px}
-.controls select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);max-width:100%}
-.from-row{flex:1 1 100%;flex-wrap:wrap}
-@keyframes pulse{50%{stroke-opacity:.3}}
-.room.sel rect{animation:pulse 1.4s ease-in-out infinite}
-@media (prefers-reduced-motion:reduce){.room.sel rect{animation:none}}
+.spot:focus-visible circle{stroke:var(--route);stroke-width:3}
+
 .entrance{cursor:pointer}
-.entrance rect{fill:var(--entr);stroke:var(--bg);stroke-width:1.5}
-.entrance text{font-size:9px;font-weight:700;fill:var(--entr-fg);pointer-events:none}
-.entrance .elabel{fill:var(--entr);font-size:11px;paint-order:stroke;stroke:var(--bg);stroke-width:3px;visibility:hidden}
-.entrance.on rect{stroke:var(--fg);stroke-width:2.5}
-.entrance.on .elabel,.entrance:hover .elabel,.entrance:focus .elabel{visibility:visible}
+.entrance .edot{fill:var(--ok);stroke:var(--surface);stroke-width:2.5}
+.entrance .eico{fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.entrance .ering{fill:none;stroke:var(--ok);stroke-width:2;opacity:0;transform-box:fill-box;transform-origin:center}
+.entrance .etag{visibility:hidden;pointer-events:none}
+.entrance .etag rect{fill:var(--ok);}
+.entrance .etag text{font-size:10.5px;font-weight:700;fill:#fff}
+.z-in .entrance .etag,.entrance:hover .etag,.entrance:focus-visible .etag,.entrance.on .etag{visibility:visible}
+.entrance.on .edot{stroke:var(--fg);stroke-width:3}
+.entrance.on .ering{opacity:1;animation:ping 2s ease-out infinite}
 .entrance:focus{outline:none}
-.route-casing{fill:none;stroke:var(--bg);stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
-.route-line{fill:none;stroke:var(--route);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
-.route-end{fill:var(--route);stroke:var(--bg);stroke-width:2}
-.net-edge{stroke:var(--net);stroke-width:2;fill:none}
-.net-edge.guess{stroke:var(--guess);stroke-dasharray:6 4}
-.net-node{fill:var(--net)}
-.net-node.guess{fill:var(--guess)}
-.net-attach{stroke:var(--net);stroke-width:1;stroke-dasharray:2 2}
-.net-door{fill:var(--bg);stroke:var(--net);stroke-width:1.5}
-#layer-net{pointer-events:none}
-#layer-route{pointer-events:none}
-.panel ol{margin:6px 0 0;padding-left:22px;font-size:14px}
-.panel h3{font-size:15px;font-weight:600;margin:14px 0 2px}
-.note{color:var(--muted);font-size:13px;margin:6px 0 0}
-.sw-entr{background:var(--entr);border-color:var(--entr)}
-.sw-route{background:var(--route);border-color:var(--route);height:4px;width:16px;border-radius:2px}
+.entrance:focus-visible .edot{stroke:var(--route)}
+@keyframes ping{0%{transform:scale(.8);opacity:.9}100%{transform:scale(2.1);opacity:0}}
+
+.route-casing{fill:none;stroke:var(--map);stroke-width:calc(var(--u,1) * 10);stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.route-line{fill:none;stroke:var(--route);stroke-width:calc(var(--u,1) * 5);stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1s cubic-bezier(.3,.7,.2,1) forwards;filter:drop-shadow(0 0 5px color-mix(in srgb,var(--route) 60%,transparent))}
+.route-flow{fill:none;stroke:#fff;stroke-opacity:.8;stroke-width:calc(var(--u,1) * 1.8);stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:calc(var(--u,1) * 1) calc(var(--u,1) * 13);opacity:0;animation:fadein .3s 1s forwards,flow 1.1s 1s linear infinite}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes fadein{to{opacity:1}}
+@keyframes flow{to{stroke-dashoffset:calc(var(--u,1) * -14)}}
+.route-end-ring{fill:var(--route);opacity:.3;transform-box:fill-box;transform-origin:center;animation:ping2 2s ease-out infinite}
+.route-end{fill:var(--route);stroke:#fff;stroke-width:3}
+.route-end-dot{fill:#fff}
+@keyframes ping2{0%{transform:scale(.7);opacity:.5}100%{transform:scale(2.4);opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .route-line{animation:none;stroke-dashoffset:0}
+  .route-flow,.route-end-ring,.entrance.on .ering,.room.sel rect{animation:none}
+  .route-flow{display:none}
+}
+.net-edge{stroke:var(--muted);stroke-width:2.5;fill:none;stroke-linecap:round}
+.net-edge.guess{stroke:#e28a1c;stroke-dasharray:6 4}
+.net-node{fill:var(--muted)}
+.net-node.guess{fill:#e28a1c}
+.net-attach{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2}
+.net-door{fill:var(--surface);stroke:var(--muted);stroke-width:1.5}
+#layer-net,#layer-route{pointer-events:none}
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1 id="title"></h1>
-    <p class="sub" id="sub"></p>
-  </header>
 
-  <input id="q" type="search" placeholder="Search a room, door number, or something like restrooms" aria-label="Search the building" autocomplete="off">
-  <div id="results" role="list" aria-live="polite"></div>
+<header class="topbar">
+  <div class="logo"><span class="ico" id="logoico"></span></div>
+  <div class="brand"><b id="title">Stokes Hall</b><span>Indoor map</span></div>
+  <span class="pill" id="level"></span>
+  <span class="spacer"></span>
+  <span class="pill hot hide-sm">Proof of concept</span>
+  <button class="iconbtn" id="theme" aria-label="Switch between light and dark"><span class="ico" id="themeico"></span></button>
+</header>
 
-  <div class="controls">
-    <label class="from-row" for="from">I'm entering from
-      <select id="from"><option value="">Choose an entrance</option></select>
-    </label>
-    <label><input type="checkbox" id="accessible"> Accessible route (no stairs or steps)</label>
-    <label><input type="checkbox" id="shownet"> Show path network</label>
-  </div>
+<div class="layout">
+  <aside class="side">
+    <section class="card" id="planner" aria-label="Plan a route">
+      <div class="fields">
+        <div class="field" id="fromfield">
+          <span class="pin from"></span>
+          <label for="from">I'm entering from</label>
+          <select id="from"><option value="">Choose an entrance</option></select>
+          <span class="chev ico" id="chev"></span>
+        </div>
+        <div class="field">
+          <span class="pin to"></span>
+          <label for="q">Going to</label>
+          <input id="q" type="search" placeholder="Room number, name, or something like restrooms" autocomplete="off" spellcheck="false" enterkeyhint="search">
+        </div>
+      </div>
+      <div class="results" id="results" role="listbox" aria-label="Search results" aria-live="polite"></div>
+      <div class="quick" id="quick"><span>Nearest</span></div>
+      <label class="switch">
+        <input type="checkbox" id="accessible">
+        <span class="track"></span>
+        <span class="lbl"><b>Step-free route</b><small>Avoids stairs and steps</small></span>
+      </label>
+    </section>
 
-  <div id="legend" role="group" aria-label="Filter by type"></div>
+    <section class="card" id="routecard" aria-live="polite"></section>
+    <section class="card" id="detail" aria-live="polite"></section>
+    <section class="card photo" id="photo" aria-live="polite"></section>
+    <div id="foot"></div>
+  </aside>
 
-  <div class="mapwrap">
-    <svg id="map" viewBox="10 40 990 750" role="group" aria-label="Floor plan, drag to pan"></svg>
-    <div class="zoom">
-      <button id="zin" aria-label="Zoom in">+</button>
-      <button id="zout" aria-label="Zoom out">&minus;</button>
-      <button id="zreset" class="reset" aria-label="Reset view">All</button>
+  <main class="stage">
+    <div class="mapwrap">
+      <svg id="map" role="group" aria-label="Floor plan. Drag to pan, scroll or pinch to zoom."></svg>
+      <div class="maptools">
+        <label class="glass"><input type="checkbox" id="shownet"> Show path network</label>
+        <div class="glass netkey" id="netkey"><span><i></i>Traced</span><span><i class="g"></i>Guessed</span></div>
+      </div>
+      <div class="zoom glass">
+        <button id="zin" aria-label="Zoom in">+</button>
+        <button id="zout" aria-label="Zoom out">&minus;</button>
+        <button id="zreset" class="all" aria-label="Show the whole floor">All</button>
+      </div>
+      <div class="legend glass" id="legend" role="group" aria-label="Show or hide room types"></div>
     </div>
-  </div>
-
-  <section class="panel" id="detail" aria-live="polite"></section>
-  <section class="panel photo" id="photo" aria-live="polite"></section>
-  <p class="progress" id="progress"></p>
-</main>
+  </main>
+</div>
 
 <script src="data.js"></script>
 <script src="logic.js"></script>
@@ -149,107 +336,154 @@ button:hover{border-color:var(--muted)}
 (function () {
   var B = window.BUILDING, ROOMS = window.ROOMS, SPOTS = window.SPOTS, SHELLS = window.SHELLS;
   var ENTRANCES = window.ENTRANCES || [], PATHS = window.PATHS || { nodes: [], edges: [] };
+  var SCALE = window.SCALE || { feetPerUnit: 0.7, guess: true };
   var ML = window.MapLogic;
   var graph = ML.buildGraph(PATHS, ROOMS, ENTRANCES, SPOTS);
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
+
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
     connector: 'Connector'
   };
   var LEGEND = ['classroom', 'office', 'service', 'it', 'common', 'conf', 'core'];
+  var QUICK = [['Restrooms', 'restrooms'], ['Elevators', 'elevators'], ['Cafe', 'cafe'], ['Advising', 'advising']];
   var NS = 'http://www.w3.org/2000/svg';
-  var svg = document.getElementById('map');
   var FULL = { x: 10, y: 40, w: 990, h: 750 };
-  var RATIO = FULL.h / FULL.w;
-  var vb = { x: FULL.x, y: FULL.y, w: FULL.w, h: FULL.h };
-  var sel = null, hidden = {}, query = '', moved = false;
+  var REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Icons: plain 24x24 line drawings.
+  var ICONS = {
+    straight: '<path d="M12 20V5M6 11l6-6 6 6"/>',
+    left: '<path d="M18 20v-8a4 4 0 0 0-4-4H6M10 4 6 8l4 4"/>',
+    right: '<path d="M6 20v-8a4 4 0 0 1 4-4h8M14 4l4 4-4 4"/>',
+    'sharp-left': '<path d="M18 20V10a4 4 0 0 0-4-4H7M10 2 6 6l4 4"/>',
+    'sharp-right': '<path d="M6 20V10a4 4 0 0 1 4-4h7M14 2l4 4-4 4"/>',
+    around: '<path d="M7 20V9a4 4 0 0 1 8 0v8M11 13l4 4 4-4"/>',
+    start: '<circle cx="12" cy="12" r="4.5"/>',
+    arrive: '<path d="M6 21V4M6 4h12l-2.5 4.5L18 13H6"/>',
+    route: '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h5.5"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.800 12 21 12 21z"/><circle cx="12" cy="9.500" r="2.500"/>',
+    moon: '<path d="M20.500 14.500A8.500 8.500 0 0 1 9.500 3.500a8.500 8.500 0 1 0 11 11z"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/>',
+    chev: '<path d="m6 9 6 6 6-6"/>'
+  };
+  function icon(name, cls) {
+    var s = document.createElement('span');
+    s.className = 'ico' + (cls ? ' ' + cls : '');
+    s.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || ICONS.straight) + '</svg>';
+    return s;
+  }
+  function fillIcon(id, name) { var t = document.getElementById(id); t.textContent = ''; t.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>'; }
+
+  var $ = function (id) { return document.getElementById(id); };
+  var svg = $('map'), input = $('q');
+  var sel = null, hidden = {}, query = '', moved = false, from = '', accessible = false;
+  var route = null, dirs = null, viaQuick = '', active = -1, shown = [];
   var roomEls = {}, spotEls = {}, entrEls = {};
-  var from = '', accessible = false, route = null;
   var layerNet, layerRoute;
+  var view = { cx: FULL.x + FULL.w / 2, cy: FULL.y + FULL.h / 2, w: FULL.w };
+  var anim = 0;
 
-  document.getElementById('title').textContent = B.name + ', ' + B.level;
-  document.getElementById('sub').textContent = B.note;
-
+  function h(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) {
+      if (k === 'class') { e.className = attrs[k]; } else if (k === 'text') { e.textContent = attrs[k]; } else { e.setAttribute(k, attrs[k]); }
+    }
+    (kids || []).forEach(function (c) { if (c != null) { e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); } });
+    return e;
+  }
   function el(name, attrs, parent) {
     var e = document.createElementNS(NS, name);
     for (var k in attrs) { e.setAttribute(k, attrs[k]); }
     if (parent) { parent.appendChild(e); }
     return e;
   }
+  function swatch(type, cls) { var s = h('span', { 'class': cls || 'sw' }); s.style.background = 'var(--c-' + type + ')'; return s; }
 
   function labelFor(r) { return r.door ? r.door : (r.label || r.id); }
+  function roomTitle(r) { return r.door ? r.door + ' (' + r.name + ')' : r.name; }
+  function titleOf(m) { return m.kind === 'room' ? roomTitle(m.o) : m.o.label; }
+  function entranceById(id) {
+    for (var i = 0; i < ENTRANCES.length; i++) { if (ENTRANCES[i].id === id) { return ENTRANCES[i]; } }
+    return null;
+  }
 
+  // ---------- Header ----------
+  $('title').textContent = B.name;
+  $('level').textContent = B.level;
+  fillIcon('logoico', 'pin'); fillIcon('chev', 'chev');
+
+  // ---------- Map drawing ----------
   function draw() {
-    SHELLS.forEach(function (s) {
-      el('rect', { x: s[0], y: s[1], width: s[2], height: s[3], 'class': 'shell' }, svg);
-    });
+    var defs = el('defs', {}, svg);
+    var pat = el('pattern', { id: 'dots', width: 24, height: 24, patternUnits: 'userSpaceOnUse' }, defs);
+    el('circle', { 'class': 'dot', cx: 1.5, cy: 1.5, r: 1.1 }, pat);
+    var f = el('filter', { id: 'lift', x: '-10%', y: '-10%', width: '120%', height: '130%' }, defs);
+    el('feDropShadow', { dx: 0, dy: 5, stdDeviation: 7, 'flood-color': '#000', 'flood-opacity': 0.14 }, f);
+    el('rect', { x: -600, y: -600, width: 2400, height: 2200, 'class': 'bgrid' }, svg);
+
+    SHELLS.forEach(function (s) { el('rect', { x: s[0], y: s[1], width: s[2], height: s[3], rx: 8, 'class': 'shell' }, svg); });
+    el('text', { x: SHELLS[0][0] + 2, y: SHELLS[0][1] - 8, 'class': 'wing' }, svg).textContent = 'SOUTH WING';
+    el('text', { x: SHELLS[3][0] + 2, y: SHELLS[3][1] - 8, 'class': 'wing' }, svg).textContent = 'NORTH WING';
+
     ROOMS.forEach(function (r) {
       var g = el('g', { 'class': 'room t-' + r.type, 'data-id': r.id, tabindex: 0, role: 'button', 'aria-label': r.name }, svg);
-      el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 2 }, g);
+      el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 4 }, g);
       var lines = String(labelFor(r)).split('\n');
       var cx = r.x + r.w / 2;
-      var t = el('text', { x: cx, y: r.y + r.h / 2 - (lines.length - 1) * 5.5 + 3.5, 'text-anchor': 'middle' }, g);
-      lines.forEach(function (ln, i) {
-        var ts = el('tspan', { x: cx, dy: i ? 11 : 0 }, t);
-        ts.textContent = ln;
-      });
+      var t = el('text', { x: cx, y: r.y + r.h / 2 - (lines.length - 1) * 5.5 + 3.6, 'text-anchor': 'middle' }, g);
+      lines.forEach(function (ln, i) { el('tspan', { x: cx, dy: i ? 11.5 : 0 }, t).textContent = ln; });
       el('title', {}, g).textContent = r.name;
       roomEls[r.id] = g;
     });
+
     layerNet = el('g', { id: 'layer-net', 'aria-hidden': 'true' }, svg);
     layerRoute = el('g', { id: 'layer-route', 'aria-hidden': 'true' }, svg);
+
     SPOTS.forEach(function (s) {
-      var g = el('g', { 'class': 'spot', 'data-spot': s.id, tabindex: 0, role: 'button', 'aria-label': s.label + ', photo point' }, svg);
-      el('circle', { cx: s.x, cy: s.y, r: 11 }, g);
-      var t = el('text', { x: s.x, y: s.y + 3.5, 'text-anchor': 'middle' }, g);
-      t.textContent = '360';
+      var g = el('g', { 'class': 'spot', 'data-spot': s.id, tabindex: 0, role: 'button', 'aria-label': s.label + ', photo point', transform: 'translate(' + s.x + ' ' + s.y + ')' }, svg);
+      var mk = el('g', { 'class': 'mk' }, g);
+      el('circle', { cx: 0, cy: 0, r: 9.5 }, mk);
+      el('text', { x: 0, y: 2.8, 'text-anchor': 'middle' }, mk).textContent = '360';
       el('title', {}, g).textContent = s.label;
       spotEls[s.id] = g;
     });
+
     ENTRANCES.forEach(function (en) {
-      var g = el('g', { 'class': 'entrance', 'data-entr': en.id, tabindex: 0, role: 'button', 'aria-label': 'Entrance: ' + en.name }, svg);
-      el('rect', { x: en.x - 11, y: en.y - 7, width: 22, height: 14, rx: 3 }, g);
-      el('text', { x: en.x, y: en.y + 3.2, 'text-anchor': 'middle' }, g).textContent = 'IN';
-      var below = en.y < 400;
-      var anchor = en.x > 900 ? 'end' : (en.x < 100 ? 'start' : 'middle');
-      el('text', { 'class': 'elabel', x: en.x, y: en.y + (below ? 22 : -12), 'text-anchor': anchor }, g).textContent = en.name;
+      var g = el('g', { 'class': 'entrance', 'data-entr': en.id, tabindex: 0, role: 'button', 'aria-label': 'Entrance: ' + en.name, transform: 'translate(' + en.x + ' ' + en.y + ')' }, svg);
+      var mk = el('g', { 'class': 'mk' }, g);
+      el('circle', { 'class': 'ering', cx: 0, cy: 0, r: 11 }, mk);
+      el('circle', { cx: 0, cy: 0, r: 15, fill: 'transparent' }, mk);
+      el('circle', { 'class': 'edot', cx: 0, cy: 0, r: 10.5 }, mk);
+      el('path', { 'class': 'eico', d: 'M-5.500 0h8M-0.500 -3.500l3.500 3.500-3.500 3.500M4 -5.500v11' }, mk);
+      // The name tag sits below the dot (above it near the bottom edge) and leans away from the map edges.
+      var tw = en.name.length * 6 + 18;
+      var tx = en.x > 900 ? -tw + 14 : (en.x < 100 ? -14 : -tw / 2);
+      var ty = en.y > 650 ? -34 : 17;
+      var tag = el('g', { 'class': 'etag' }, mk);
+      el('rect', { x: tx, y: ty, width: tw, height: 20, rx: 10 }, tag);
+      el('text', { x: tx + tw / 2, y: ty + 13.800, 'text-anchor': 'middle' }, tag).textContent = en.name;
       el('title', {}, g).textContent = 'Entrance: ' + en.name + (en.guess ? ' (position not checked on site yet)' : '');
       entrEls[en.id] = g;
     });
   }
 
-  // Draws every hallway line, door point and the short links between them.
-  // Orange dashed lines and dots are guesses to check on site.
   function drawNetwork() {
     var nodeById = {};
     PATHS.nodes.forEach(function (n) { nodeById[n.id] = n; });
-    graph.attach.forEach(function (a) {
-      el('line', { 'class': 'net-attach', x1: a.from.x, y1: a.from.y, x2: a.to.x, y2: a.to.y }, layerNet);
-    });
+    graph.attach.forEach(function (a) { el('line', { 'class': 'net-attach', x1: a.from.x, y1: a.from.y, x2: a.to.x, y2: a.to.y }, layerNet); });
     PATHS.edges.forEach(function (e) {
       var a = nodeById[e.from], b = nodeById[e.to];
-      if (!a || !b) { return; }
-      el('line', { 'class': 'net-edge' + (e.guess ? ' guess' : ''), x1: a.x, y1: a.y, x2: b.x, y2: b.y }, layerNet);
+      if (a && b) { el('line', { 'class': 'net-edge' + (e.guess ? ' guess' : ''), x1: a.x, y1: a.y, x2: b.x, y2: b.y }, layerNet); }
     });
     PATHS.nodes.forEach(function (n) {
-      var c = el('circle', { 'class': 'net-node' + (n.guess ? ' guess' : ''), cx: n.x, cy: n.y, r: 3 }, layerNet);
+      var c = el('circle', { 'class': 'net-node' + (n.guess ? ' guess' : ''), cx: n.x, cy: n.y, r: 3.2 }, layerNet);
       el('title', {}, c).textContent = n.id + ': ' + (n.name || '');
     });
-    ROOMS.forEach(function (r) {
-      (r.doors || []).forEach(function (d) {
-        el('circle', { 'class': 'net-door', cx: d[0], cy: d[1], r: 2.5 }, layerNet);
-      });
-    });
-  }
-
-  function search(q) { return ML.search(q, ROOMS, SPOTS); }
-
-  function findRoute() {
-    route = null;
-    if (!sel || !from) { return; }
-    route = ML.routeTo(graph, from, sel, { accessible: accessible });
+    ROOMS.forEach(function (r) { (r.doors || []).forEach(function (d) { el('circle', { 'class': 'net-door', cx: d[0], cy: d[1], r: 2.8 }, layerNet); }); });
   }
 
   function drawRoute() {
@@ -257,264 +491,320 @@ button:hover{border-color:var(--muted)}
     if (!route) { return; }
     var pts = route.points.map(function (p) { return p[0] + ',' + p[1]; }).join(' ');
     el('polyline', { 'class': 'route-casing', points: pts }, layerRoute);
-    el('polyline', { 'class': 'route-line', points: pts }, layerRoute);
+    el('polyline', { 'class': 'route-line', points: pts, pathLength: 1 }, layerRoute);
+    el('polyline', { 'class': 'route-flow', points: pts }, layerRoute);
     var end = route.points[route.points.length - 1];
-    el('circle', { 'class': 'route-end', cx: end[0], cy: end[1], r: 6 }, layerRoute);
+    var eg = el('g', { transform: 'translate(' + end[0] + ' ' + end[1] + ')' }, layerRoute);
+    var mk = el('g', { 'class': 'mk' }, eg);
+    el('circle', { 'class': 'route-end-ring', cx: 0, cy: 0, r: 8 }, mk);
+    el('circle', { 'class': 'route-end', cx: 0, cy: 0, r: 7.5 }, mk);
+    el('circle', { 'class': 'route-end-dot', cx: 0, cy: 0, r: 2.6 }, mk);
   }
 
-  function entranceById(id) {
-    for (var i = 0; i < ENTRANCES.length; i++) { if (ENTRANCES[i].id === id) { return ENTRANCES[i]; } }
-    return null;
+  // ---------- View: pan, zoom, animated framing ----------
+  function ratio() { var w = svg.clientWidth, hh = svg.clientHeight; return (w && hh) ? hh / w : FULL.h / FULL.w; }
+  function allW() { return Math.max(FULL.w, FULL.h / ratio()); }
+  function clampView(v) {
+    v.w = Math.max(130, Math.min(allW() * 1.05, v.w));
+    v.cx = Math.max(FULL.x, Math.min(FULL.x + FULL.w, v.cx));
+    v.cy = Math.max(FULL.y, Math.min(FULL.y + FULL.h, v.cy));
+    return v;
+  }
+  function applyView() {
+    var w = view.w, hh = w * ratio();
+    svg.setAttribute('viewBox', (view.cx - w / 2) + ' ' + (view.cy - hh / 2) + ' ' + w + ' ' + hh);
+    svg.classList.toggle('z-in', w < 560);
+    // Units per screen pixel. Markers and the route line use it to stay the same size on screen.
+    if (svg.clientWidth) { svg.style.setProperty('--u', (w / svg.clientWidth).toFixed(4)); }
+  }
+  function goTo(t, animate) {
+    cancelAnimationFrame(anim);
+    t = clampView(t);
+    if (!animate || REDUCED) { view = t; applyView(); return; }
+    var s = { cx: view.cx, cy: view.cy, w: view.w }, t0 = performance.now(), dur = 600;
+    (function step(now) {
+      var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      view = { cx: s.cx + (t.cx - s.cx) * e, cy: s.cy + (t.cy - s.cy) * e, w: s.w + (t.w - s.w) * e };
+      applyView();
+      if (k < 1) { anim = requestAnimationFrame(step); }
+    })(t0);
+  }
+  function showAll(animate) { goTo({ cx: FULL.x + FULL.w / 2, cy: FULL.y + FULL.h / 2, w: allW() }, animate); }
+  function zoomBy(f, px, py) {
+    if (px == null) { px = view.cx; py = view.cy; }
+    cancelAnimationFrame(anim);
+    var nw = Math.max(130, Math.min(allW() * 1.05, view.w * f)), k = nw / view.w;
+    view = clampView({ cx: px - (px - view.cx) * k, cy: py - (py - view.cy) * k, w: nw });
+    applyView();
+  }
+  function toWorld(clientX, clientY) {
+    var r = svg.getBoundingClientRect(), w = view.w, hh = w * ratio();
+    return { x: view.cx - w / 2 + ((clientX - r.left) / r.width) * w, y: view.cy - hh / 2 + ((clientY - r.top) / r.height) * hh };
   }
 
-  function refresh() {
-    var matchIds = {};
-    var res = search(query);
-    res.forEach(function (m) { if (m.kind === 'room') { matchIds[m.o.id] = true; } });
-    ROOMS.forEach(function (r) {
-      var g = roomEls[r.id];
-      var off = hidden[r.type] === true;
-      var dimBySearch = query.trim() !== '' && !matchIds[r.id];
-      g.classList.toggle('dim', off || dimBySearch);
-      g.classList.toggle('match', !!matchIds[r.id]);
-      g.classList.toggle('sel', !!sel && sel.kind === 'room' && sel.o.id === r.id);
-    });
-    SPOTS.forEach(function (s) {
-      spotEls[s.id].classList.toggle('sel', !!sel && sel.kind === 'spot' && sel.o.id === s.id);
-    });
-    ENTRANCES.forEach(function (en) {
-      entrEls[en.id].classList.toggle('on', en.id === from);
-    });
-    renderResults(res);
+  // Zooms to the chosen room and the whole route, or to the chosen entrance.
+  function frame() {
+    var b = null;
+    function grow(x0, y0, x1, y1) {
+      if (!b) { b = [x0, y0, x1, y1]; return; }
+      b[0] = Math.min(b[0], x0); b[1] = Math.min(b[1], y0); b[2] = Math.max(b[2], x1); b[3] = Math.max(b[3], y1);
+    }
+    if (sel) {
+      var o = sel.o;
+      if (sel.kind === 'room') { grow(o.x, o.y, o.x + o.w, o.y + o.h); } else { grow(o.x - 20, o.y - 20, o.x + 20, o.y + 20); }
+    }
+    if (route) { route.points.forEach(function (p) { grow(p[0], p[1], p[0], p[1]); }); }
+    else if (from) { var en = entranceById(from); grow(en.x - 60, en.y - 60, en.x + 60, en.y + 60); }
+    if (!b) { return; }
+    var pad = route ? 70 : 90, bw = b[2] - b[0] + pad * 2, bh = b[3] - b[1] + pad * 2;
+    goTo({ cx: (b[0] + b[2]) / 2, cy: (b[1] + b[3]) / 2, w: Math.max(bw, bh / ratio(), route ? 380 : 340) }, true);
   }
 
-  function renderResults(res) {
-    var box = document.getElementById('results');
+  // ---------- Search ----------
+  function search(q) { return ML.search(q, ROOMS, SPOTS); }
+
+  function renderResults() {
+    var box = $('results');
     box.textContent = '';
+    shown = [];
     if (query.trim() === '') { return; }
+    var res = search(query);
     if (!res.length) {
-      var n = document.createElement('div');
-      n.className = 'none';
-      n.textContent = 'No match. Try a door number, a room name, or words like stairs or restrooms.';
-      box.appendChild(n);
+      box.appendChild(h('div', { 'class': 'noneline', text: 'No match. Try a room number, a name, or words like stairs or restrooms.' }));
       return;
     }
-    res.slice(0, 8).forEach(function (m) {
-      var b = document.createElement('button');
-      var a = document.createElement('span');
-      var c = document.createElement('span');
-      c.className = 'meta';
-      if (m.kind === 'room') {
-        a.textContent = m.o.door ? m.o.door + ' (' + m.o.name + ')' : m.o.name;
-        c.textContent = m.o.wing + ' wing';
-      } else {
-        a.textContent = m.o.label;
-        c.textContent = 'Photo point';
-      }
-      b.appendChild(a); b.appendChild(c);
+    shown = res.slice(0, 6);
+    shown.forEach(function (m, i) {
+      var sw = m.kind === 'room' ? swatch(m.o.type) : h('span', { 'class': 'sw' });
+      if (m.kind !== 'room') { sw.style.background = 'var(--accent-soft)'; }
+      var b = h('button', { 'class': 'res' + (i === active ? ' active' : ''), type: 'button', role: 'option' }, [
+        sw,
+        h('span', { 'class': 't' }, [h('b', { text: titleOf(m) }), h('small', { text: m.kind === 'room' ? (TYPES[m.o.type] === 'Stairs, elevators, restrooms' ? 'Building core' : TYPES[m.o.type]) + ' · ' + m.o.wing + ' wing' : '360 photo point' })]),
+        h('kbd', { text: 'Enter' })
+      ]);
       b.addEventListener('click', function () { choose(m); });
+      b.addEventListener('mousemove', function () { if (active !== i) { active = i; markActive(); } });
       box.appendChild(b);
     });
-    if (res.length > 8) {
-      var more = document.createElement('div');
-      more.className = 'none';
-      more.textContent = (res.length - 8) + ' more. Type more words to narrow it down.';
-      box.appendChild(more);
-    }
+    if (res.length > 6) { box.appendChild(h('div', { 'class': 'noneline', text: (res.length - 6) + ' more. Type more words to narrow it down.' })); }
+  }
+  function markActive() {
+    var rows = $('results').querySelectorAll('.res');
+    for (var i = 0; i < rows.length; i++) { rows[i].classList.toggle('active', i === active); }
   }
 
-  function addRow(dl, label, value, empty) {
-    var dt = document.createElement('dt');
-    var dd = document.createElement('dd');
-    dt.textContent = label;
-    if (value) { dd.textContent = value; }
-    else { dd.textContent = empty; dd.className = 'empty'; }
-    dl.appendChild(dt); dl.appendChild(dd);
+  function refreshStyles() {
+    var matchIds = {};
+    if (query.trim() !== '') { search(query).forEach(function (m) { if (m.kind === 'room') { matchIds[m.o.id] = true; } }); }
+    var searching = query.trim() !== '';
+    ROOMS.forEach(function (r) {
+      var isSel = !!sel && sel.kind === 'room' && sel.o.id === r.id;
+      var g = roomEls[r.id];
+      g.classList.toggle('dim', hidden[r.type] === true);
+      g.classList.toggle('fade', searching ? !matchIds[r.id] : (!!sel && !isSel));
+      g.classList.toggle('match', searching && !!matchIds[r.id]);
+      g.classList.toggle('sel', isSel);
+    });
+    SPOTS.forEach(function (s) { spotEls[s.id].classList.toggle('sel', !!sel && sel.kind === 'spot' && sel.o.id === s.id); });
+    ENTRANCES.forEach(function (en) { entrEls[en.id].classList.toggle('on', en.id === from); });
+    $('fromfield').classList.toggle('need', !!sel && !from);
   }
 
-  function renderDetail() {
-    var box = document.getElementById('detail');
+  // ---------- Cards ----------
+  function renderRouteCard() {
+    var box = $('routecard');
     box.textContent = '';
-    if (!sel) {
-      var p = document.createElement('div');
-      p.className = 'empty';
-      p.textContent = 'Search above or tap a room on the map to see its details.';
-      box.appendChild(p);
-      return;
-    }
-    var h = document.createElement('h2');
-    box.appendChild(h);
-    var dl = document.createElement('dl');
-    if (sel.kind === 'room') {
-      var r = sel.o;
-      h.textContent = r.door ? r.door + ' (' + r.name + ')' : r.name;
-      addRow(dl, 'Type', TYPES[r.type], '');
-      addRow(dl, 'Wing', r.wing, '');
-      addRow(dl, 'Door number', r.door, 'Not added yet');
-      addRow(dl, 'Nearest landmark', r.near, 'Not added yet');
-      addRow(dl, 'Directions', r.directions, 'Not written yet');
-      var dt = document.createElement('dt'); dt.textContent = 'Status';
-      var dd = document.createElement('dd');
-      var bd = document.createElement('span');
-      bd.className = 'badge' + (r.verified ? ' ok' : '');
-      bd.textContent = r.verified ? 'Verified on site' : 'Not verified yet';
-      dd.appendChild(bd);
-      dl.appendChild(dt); dl.appendChild(dd);
-    } else {
-      var s = sel.o;
-      h.textContent = s.label;
-      addRow(dl, 'Type', 'Photo point', '');
-      var dt2 = document.createElement('dt'); dt2.textContent = 'Status';
-      var dd2 = document.createElement('dd');
-      var bd2 = document.createElement('span');
-      bd2.className = 'badge' + (s.verified ? ' ok' : '');
-      bd2.textContent = s.verified ? 'Verified on site' : 'Not verified yet';
-      dd2.appendChild(bd2);
-      dl.appendChild(dt2); dl.appendChild(dd2);
-    }
-    box.appendChild(dl);
-    renderRouteText(box);
-  }
-
-  function note(box, text) {
-    var p = document.createElement('p');
-    p.className = 'note';
-    p.textContent = text;
-    box.appendChild(p);
-  }
-
-  function renderRouteText(box) {
-    var h = document.createElement('h3');
-    h.textContent = 'How to get there';
-    box.appendChild(h);
     var en = entranceById(from);
-    if (!en) { note(box, 'Choose where you are entering from (above the map) to see a route.'); return; }
-    if (!route) {
-      note(box, accessible
-        ? 'No step-free route from ' + en.name + ' in the map data. Try another entrance.'
-        : 'No route found from ' + en.name + '. The path network may be missing a hallway here.');
+    if (!en && !sel) {
+      box.appendChild(h('div', { 'class': 'empty' }, [
+        h('span', { 'class': 'bigico' }, [icon('route')]),
+        h('div', {}, [h('h2', { text: 'Plan a route' }), h('p', { text: 'Directions appear here, with a line drawn on the map.' })])
+      ]));
+      box.appendChild(h('ul', { 'class': 'hintlist' }, [
+        h('li', {}, [h('i', { text: '1' }), 'Pick the entrance you are coming in through'] ),
+        h('li', {}, [h('i', { text: '2' }), 'Search a room, or tap one on the map'])
+      ]));
       return;
     }
-    var ol = document.createElement('ol');
-    route.names.forEach(function (n) {
-      var li = document.createElement('li');
-      li.textContent = n;
-      ol.appendChild(li);
+    if (en && !sel) {
+      box.appendChild(h('h2', { text: 'Entering from ' + en.name }));
+      box.appendChild(h('p', { 'class': 'fine', text: 'Now search for a room above, or tap one on the map.' }));
+      return;
+    }
+    if (!en) {
+      box.appendChild(h('h2', { text: 'Where are you coming in?' }));
+      box.appendChild(h('p', { 'class': 'fine', text: 'Choose an entrance in the first box, or tap a green marker on the map, to see the way to ' + titleOf(sel) + '.' }));
+      return;
+    }
+    if (!route) {
+      box.appendChild(h('h2', { text: 'No route found' }));
+      box.appendChild(h('div', { 'class': 'callout', text: accessible
+        ? 'No step-free route from ' + en.name + ' in the map data. Try another entrance.'
+        : 'No route from ' + en.name + '. The path network may be missing a hallway here.' }));
+      return;
+    }
+    var sum = h('div', { 'class': 'sum' }, [
+      h('div', { 'class': 'big' }, [String(dirs.minutes), h('small', { text: dirs.minutes === 1 ? 'min walk' : 'min walk' })]),
+      h('div', { 'class': 'dist', text: '≈ ' + dirs.feet + ' ft' })
+    ]);
+    box.appendChild(sum);
+    var badges = h('div', { 'class': 'badges' });
+    if (viaQuick) { badges.appendChild(h('span', { 'class': 'badge info', text: 'Nearest ' + viaQuick }));}
+    if (accessible) { badges.appendChild(h('span', { 'class': 'badge ok', text: 'Step-free' })); }
+    if (route.usesGuess) { badges.appendChild(h('span', { 'class': 'badge warn', text: 'Includes unchecked hallway' })); }
+    box.appendChild(badges);
+
+    var ol = h('ol', { 'class': 'steps' });
+    dirs.steps.forEach(function (s) {
+      var name = s.kind === 'start' ? 'start' : (s.kind === 'arrive' && s.turn === 'straight' ? 'arrive' : s.turn || 'straight');
+      var ic = s.kind === 'start' ? 'start' : (s.kind === 'arrive' ? 'arrive' : name);
+      ol.appendChild(h('li', { 'class': 'step ' + s.kind }, [
+        icon(ic),
+        h('span', { 'class': 'txt', text: s.text }),
+        h('span', { 'class': 'ft', text: s.feet ? s.feet + ' ft' : '' })
+      ]));
     });
     box.appendChild(ol);
-    if (accessible) {
-      note(box, STEP_EDGES
-        ? 'Step-free: this route avoids every stair and step marked in the data.'
-        : 'Step-free mode is on, but no steps are marked on this floor yet, so this is the same as the normal route.');
+
+    var acts = h('div', { 'class': 'actions' });
+    var copy = h('button', { 'class': 'btn', type: 'button' }, [icon('link'), 'Copy link']);
+    copy.addEventListener('click', function () { copyLink(copy); });
+    acts.appendChild(copy);
+    box.appendChild(acts);
+
+    if (accessible && !STEP_EDGES) {
+      box.appendChild(h('p', { 'class': 'fine', text: 'No steps are marked on this floor yet, so this is the same as the standard route.' }));
     }
-    note(box, 'Door positions and some hallways are traced from a brochure and not checked on site yet' +
-      (route.usesGuess ? ', including parts of this route (orange dashes under "Show path network").' : '.'));
+    var notes = [];
+    if (SCALE.guess) { notes.push('Distances and times are rough estimates until the map scale is measured on site.'); }
+    notes.push('Door positions and some hallways are traced from a brochure and not checked on site yet' + (route.usesGuess ? ', including parts of this route (orange dashes under "Show path network").' : '.'));
+    box.appendChild(h('p', { 'class': 'fine', text: notes.join(' ') }));
+  }
+
+  function copyLink(btn) {
+    var done = function () { var old = btn.lastChild.textContent; btn.lastChild.textContent = 'Copied'; setTimeout(function () { btn.lastChild.textContent = old; }, 1600); };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(location.href).then(done, function () { window.prompt('Copy this link:', location.href); }); }
+    else { window.prompt('Copy this link:', location.href); }
+  }
+
+  function row(dl, label, value, empty) {
+    dl.appendChild(h('dt', { text: label }));
+    dl.appendChild(h('dd', value ? { text: value } : { 'class': 'none', text: empty }));
+  }
+  function statusBadge(ok) { return h('span', { 'class': 'badge' + (ok ? ' ok' : ''), text: ok ? 'Verified on site' : 'Not verified yet' }); }
+
+  function renderDetail() {
+    var box = $('detail');
+    box.textContent = '';
+    if (!sel) {
+      box.appendChild(h('h3', { text: 'Details' }));
+      box.appendChild(h('p', { 'class': 'fine', style: 'margin:0', text: 'Select a room to see its details here.' }));
+      return;
+    }
+    var dl = h('dl');
+    if (sel.kind === 'room') {
+      var r = sel.o;
+      box.appendChild(h('div', { 'class': 'dhead' }, [swatch(r.type, 'sw'), h('div', {}, [h('h2', { text: roomTitle(r) }), h('small', { text: (r.type === 'core' ? 'Building core' : TYPES[r.type]) + ' · ' + r.wing + ' wing' })])]));
+      row(dl, 'Door number', r.door, 'Not added yet');
+      row(dl, 'Nearest landmark', r.near, 'Not added yet');
+      row(dl, 'Directions', r.directions, 'Not written yet');
+      row(dl, 'Where', r.where, '');
+      dl.appendChild(h('dt', { text: 'Status' }));
+      dl.appendChild(h('dd', {}, [statusBadge(r.verified)]));
+    } else {
+      var s = sel.o;
+      var sw = h('span', { 'class': 'sw' }); sw.style.background = 'var(--accent-soft)';
+      box.appendChild(h('div', { 'class': 'dhead' }, [sw, h('div', {}, [h('h2', { text: s.label }), h('small', { text: '360 photo point' })])]));
+      dl.appendChild(h('dt', { text: 'Status' }));
+      dl.appendChild(h('dd', {}, [statusBadge(s.verified)]));
+    }
+    box.appendChild(dl);
   }
 
   function renderPhoto() {
-    var box = document.getElementById('photo');
+    var box = $('photo');
     box.textContent = '';
-    var h = document.createElement('h2');
-    h.textContent = 'Photo';
-    box.appendChild(h);
-    var msg = document.createElement('div');
-    msg.className = 'empty';
-    box.appendChild(msg);
-    if (!sel) { msg.textContent = 'Select a room or a 360 marker to see its photo.'; return; }
+    box.appendChild(h('h3', { text: 'Photo' }));
+    if (!sel || !sel.o.photo) {
+      box.appendChild(h('div', { 'class': 'ph', text: sel ? 'No photo yet. Add a file name in data.js to show one here.' : 'Select a room or a 360 marker to see its photo.' }));
+      return;
+    }
     var file = sel.o.photo;
-    if (!file) { msg.textContent = 'No photo added yet. Set a photo file name in data.js to show one here.'; return; }
-    var img = document.createElement('img');
-    img.alt = 'Photo of ' + (sel.kind === 'room' ? sel.o.name : sel.o.label);
+    var msg = h('div', { 'class': 'ph', text: 'Loading photo' });
+    var img = h('img', { alt: 'Photo of ' + titleOf(sel) });
     img.onerror = function () { img.remove(); msg.textContent = 'Photo file not found: ' + file; };
-    img.onload = function () { msg.textContent = ''; };
+    img.onload = function () { msg.remove(); };
     img.src = file;
-    box.appendChild(img);
+    box.appendChild(msg); box.appendChild(img);
   }
 
-  function setVB() {
-    vb.h = vb.w * RATIO;
-    svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);
-  }
-  function clampVB() {
-    vb.w = Math.max(140, Math.min(FULL.w, vb.w));
-    vb.h = vb.w * RATIO;
-    vb.x = Math.max(FULL.x - 40, Math.min(FULL.x + FULL.w + 40 - vb.w, vb.x));
-    vb.y = Math.max(FULL.y - 40, Math.min(FULL.y + FULL.h + 40 - vb.h, vb.y));
-  }
-  function zoom(f, cx, cy) {
-    if (cx == null) { cx = vb.x + vb.w / 2; }
-    if (cy == null) { cy = vb.y + vb.h / 2; }
-    var nw = Math.max(140, Math.min(FULL.w, vb.w * f));
-    var k = nw / vb.w;
-    vb.x = cx - (cx - vb.x) * k;
-    vb.y = cy - (cy - vb.y) * k;
-    vb.w = nw;
-    clampVB(); setVB();
-  }
-  function fitTo(x, y, w, h) {
-    var nw = Math.max(240, w * 2.6, (h * 2.6) / RATIO);
-    vb.w = Math.min(nw, FULL.w);
-    vb.x = x + w / 2 - vb.w / 2;
-    vb.h = vb.w * RATIO;
-    vb.y = y + h / 2 - vb.h / 2;
-    clampVB(); setVB();
+  function renderFoot() {
+    var box = $('foot');
+    var cls = ROOMS.filter(function (r) { return r.type === 'classroom'; });
+    var done = cls.filter(function (r) { return r.door; }).length;
+    var photos = SPOTS.filter(function (s) { return s.photo; }).length;
+    function bar(label, n, total) {
+      var i = h('i'); i.style.width = (total ? Math.round(100 * n / total) : 0) + '%';
+      return h('div', {}, [h('div', { 'class': 'row' }, [h('span', { text: label }), h('span', { text: n + ' of ' + total })]), h('div', { 'class': 'meter' }, [i])]);
+    }
+    box.textContent = '';
+    box.appendChild(h('h3', { text: 'Data progress', style: 'margin-top:6px' }));
+    box.appendChild(bar('Classrooms with door numbers', done, cls.length));
+    box.appendChild(bar('Photo points with photos', photos, SPOTS.length));
+    box.appendChild(h('p', { style: 'margin:0', text: B.note }));
   }
 
-  // Zooms so the whole box (plus some margin) fits on screen.
-  function fitBox(x0, y0, x1, y1) {
-    var pad = 40;
-    var w = x1 - x0 + pad * 2, h = y1 - y0 + pad * 2;
-    vb.w = Math.min(FULL.w, Math.max(240, w, h / RATIO));
-    vb.h = vb.w * RATIO;
-    vb.x = (x0 + x1) / 2 - vb.w / 2;
-    vb.y = (y0 + y1) / 2 - vb.h / 2;
-    clampVB(); setVB();
+  // ---------- State changes ----------
+  function findRoute() {
+    route = null; dirs = null;
+    if (!sel || !from) { return; }
+    route = ML.routeTo(graph, from, sel, { accessible: accessible });
+    if (route) { dirs = ML.describe(graph, route, titleOf(sel), { feetPerUnit: SCALE.feetPerUnit }); }
   }
 
-  function frame() {
-    if (!sel) { return; }
-    var o = sel.o;
-    var box = sel.kind === 'room' ? [o.x, o.y, o.x + o.w, o.y + o.h] : [o.x - 20, o.y - 20, o.x + 20, o.y + 20];
-    if (!route) { fitTo(box[0], box[1], box[2] - box[0], box[3] - box[1]); return; }
-    route.points.forEach(function (p) {
-      box[0] = Math.min(box[0], p[0]); box[1] = Math.min(box[1], p[1]);
-      box[2] = Math.max(box[2], p[0]); box[3] = Math.max(box[3], p[1]);
-    });
-    fitBox(box[0], box[1], box[2], box[3]);
-  }
-
-  // Call after the room, entrance or accessible setting changes.
   function update(reframe) {
     findRoute();
     drawRoute();
-    if (reframe) { frame(); }
-    refresh(); renderDetail(); renderPhoto();
+    renderRouteCard(); renderDetail(); renderPhoto();
+    refreshStyles(); renderResults();
     saveUrl();
+    if (reframe) { frame(); }
   }
 
-  function choose(m) {
-    sel = m;
+  function choose(m, quick) {
+    sel = m; query = ''; active = -1; viaQuick = quick || '';
+    input.value = titleOf(m);
     update(true);
+    input.blur();
   }
 
   function setFrom(id) {
     from = entranceById(id) ? id : '';
-    document.getElementById('from').value = from;
+    $('from').value = from;
     try { localStorage.setItem('stokes-from', from); } catch (e) { /* storage blocked: fine */ }
     update(true);
   }
 
-  // Keeps the address bar in step, so a link like index.html?from=E-S-WEST&room=S03 opens a route.
-  // Handy for QR codes at each entrance.
+  // Quick "nearest" buttons. With an entrance chosen, jump straight to the closest match.
+  function quick(term, name) {
+    var targets = search(term).filter(function (m) { return m.kind === 'room'; });
+    if (!targets.length) { return; }
+    if (from) {
+      var best = ML.nearest(graph, from, targets, { accessible: accessible });
+      if (best) { choose(best.target, name.toLowerCase()); return; }
+    }
+    query = term; input.value = term; active = 0;
+    update(false); input.focus();
+  }
+
   function saveUrl() {
     if (!window.history || !history.replaceState) { return; }
     var p = [];
     if (from) { p.push('from=' + encodeURIComponent(from)); }
     if (sel) { p.push((sel.kind === 'room' ? 'room=' : 'spot=') + encodeURIComponent(sel.o.id)); }
     if (accessible) { p.push('accessible=1'); }
-    try { history.replaceState(null, '', location.pathname + (p.length ? '?' + p.join('&') : '')); } catch (e) { /* file:// in some browsers */ }
+    try { history.replaceState(null, '', location.pathname + (p.length ? '?' + p.join('&') : '')); } catch (e) { /* some browsers block this on file:// */ }
   }
-
   function readUrl() {
     var p = {};
     location.search.replace(/^\?/, '').split('&').forEach(function (kv) {
@@ -524,90 +814,107 @@ button:hover{border-color:var(--muted)}
     return p;
   }
 
-  function buildFromPicker() {
-    var s = document.getElementById('from');
-    ENTRANCES.forEach(function (en) {
-      var o = document.createElement('option');
-      o.value = en.id;
-      o.textContent = en.name;
-      s.appendChild(o);
-    });
-    s.addEventListener('change', function () { setFrom(s.value); });
-    var a = document.getElementById('accessible');
-    a.addEventListener('change', function () { accessible = a.checked; update(true); });
-    var n = document.getElementById('shownet');
-    n.addEventListener('change', function () {
+  // ---------- Controls ----------
+  function build() {
+    ENTRANCES.forEach(function (en) { $('from').appendChild(h('option', { value: en.id, text: en.name })); });
+    $('from').addEventListener('change', function () { setFrom($('from').value); });
+    $('accessible').addEventListener('change', function () { accessible = $('accessible').checked; update(true); });
+    $('shownet').addEventListener('change', function () {
       layerNet.textContent = '';
-      if (n.checked) { drawNetwork(); }
+      var on = $('shownet').checked;
+      if (on) { drawNetwork(); }
+      $('netkey').classList.toggle('on', on);
     });
-  }
 
-  function buildLegend() {
-    var box = document.getElementById('legend');
+    QUICK.forEach(function (q) {
+      var b = h('button', { 'class': 'chip', type: 'button', text: q[0] });
+      b.addEventListener('click', function () { quick(q[1], q[0]); });
+      $('quick').appendChild(b);
+    });
+
+    var lg = $('legend');
     LEGEND.forEach(function (t) {
-      var b = document.createElement('button');
-      b.setAttribute('aria-pressed', 'true');
-      var sw = document.createElement('span');
-      sw.className = 'sw';
-      sw.style.background = 'var(--c-' + t + ')';
-      b.appendChild(sw);
-      b.appendChild(document.createTextNode(TYPES[t]));
+      var b = h('button', { type: 'button', 'aria-pressed': 'true' }, [swatch(t), TYPES[t]]);
       b.addEventListener('click', function () {
         hidden[t] = !hidden[t];
         b.setAttribute('aria-pressed', hidden[t] ? 'false' : 'true');
-        refresh();
+        refreshStyles();
       });
-      box.appendChild(b);
+      lg.appendChild(b);
     });
-    var sp = document.createElement('span');
-    sp.className = 'badge';
-    sp.textContent = '360 = photo point';
-    sp.style.alignSelf = 'center';
-    box.appendChild(sp);
-    [['sw sw-entr', 'IN = entrance'], ['sw sw-route', 'Route']].forEach(function (k) {
-      var b = document.createElement('span');
-      b.className = 'badge';
-      b.style.display = 'inline-flex'; b.style.alignItems = 'center'; b.style.gap = '6px';
-      var s = document.createElement('span');
-      s.className = k[0];
-      b.appendChild(s);
-      b.appendChild(document.createTextNode(k[1]));
-      box.appendChild(b);
+
+    input.addEventListener('input', function () {
+      query = input.value; active = query.trim() ? 0 : -1;
+      if (query.trim() === '' && sel) { sel = null; viaQuick = ''; update(false); return; }
+      refreshStyles(); renderResults();
+    });
+    input.addEventListener('focus', function () { input.select(); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown' && shown.length) { e.preventDefault(); active = (active + 1) % shown.length; markActive(); }
+      else if (e.key === 'ArrowUp' && shown.length) { e.preventDefault(); active = (active - 1 + shown.length) % shown.length; markActive(); }
+      else if (e.key === 'Enter') { if (shown.length) { choose(shown[active >= 0 ? active : 0]); } }
+      else if (e.key === 'Escape') { query = ''; input.value = sel ? titleOf(sel) : ''; update(false); input.blur(); }
+    });
+
+    $('zin').addEventListener('click', function () { zoomBy(0.7); });
+    $('zout').addEventListener('click', function () { zoomBy(1.4); });
+    $('zreset').addEventListener('click', function () { showAll(true); });
+
+    $('theme').addEventListener('click', function () {
+      var cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      setTheme(cur === 'dark' ? 'light' : 'dark', true);
     });
   }
 
-  function buildProgress() {
-    var cls = ROOMS.filter(function (r) { return r.type === 'classroom'; });
-    var done = cls.filter(function (r) { return r.door; }).length;
-    var spotsDone = SPOTS.filter(function (s) { return s.photo; }).length;
-    document.getElementById('progress').textContent =
-      'Data progress: ' + done + ' of ' + cls.length + ' classrooms have door numbers, ' +
-      spotsDone + ' of ' + SPOTS.length + ' photo points have photos.';
+  function setTheme(t, save) {
+    document.documentElement.setAttribute('data-theme', t);
+    fillIcon('themeico', t === 'dark' ? 'sun' : 'moon');
+    if (save) { try { localStorage.setItem('stokes-theme', t); } catch (e) { /* fine */ } }
   }
 
-  var drag = null;
+  // ---------- Pointer: drag to pan, pinch to zoom, tap to select ----------
+  var ptrs = {}, drag = null, pinch = null;
+  function count() { return Object.keys(ptrs).length; }
+  function mid() { var k = Object.keys(ptrs).map(function (i) { return ptrs[i]; }); return { x: (k[0].x + k[1].x) / 2, y: (k[0].y + k[1].y) / 2, d: Math.hypot(k[0].x - k[1].x, k[0].y - k[1].y) }; }
   svg.addEventListener('pointerdown', function (e) {
-    moved = false;
-    drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y };
+    cancelAnimationFrame(anim);
+    ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (count() === 1) { moved = false; drag = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy }; }
+    else if (count() === 2) { var m = mid(); pinch = { d: m.d, w: view.w, at: toWorld(m.x, m.y) }; drag = null; moved = true; }
   });
   svg.addEventListener('pointermove', function (e) {
-    if (!drag) { return; }
-    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (Math.abs(dx) + Math.abs(dy) > 6) { moved = true; }
-    if (moved) {
-      var s = vb.w / svg.clientWidth;
-      vb.x = drag.vx - dx * s;
-      vb.y = drag.vy - dy * s;
-      clampVB(); setVB();
+    if (!ptrs[e.pointerId]) { return; }
+    ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (pinch && count() === 2) {
+      var m = mid(), r = svg.getBoundingClientRect();
+      var w = Math.max(130, Math.min(allW() * 1.05, pinch.w * pinch.d / Math.max(m.d, 1)));
+      view = clampView({
+        w: w,
+        cx: pinch.at.x - ((m.x - r.left) / r.width - 0.5) * w,
+        cy: pinch.at.y - ((m.y - r.top) / r.height - 0.5) * w * ratio()
+      });
+      applyView();
+    } else if (drag) {
+      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 6) { moved = true; }
+      if (moved) {
+        var s = view.w / svg.clientWidth;
+        view = clampView({ cx: drag.cx - dx * s, cy: drag.cy - dy * s, w: view.w });
+        applyView();
+      }
     }
   });
-  window.addEventListener('pointerup', function () { drag = null; });
+  function lift(e) {
+    delete ptrs[e.pointerId];
+    pinch = null;
+    if (count() === 1) { var k = ptrs[Object.keys(ptrs)[0]]; drag = { x: k.x, y: k.y, cx: view.cx, cy: view.cy }; } else { drag = null; }
+  }
+  window.addEventListener('pointerup', lift);
+  window.addEventListener('pointercancel', lift);
   svg.addEventListener('wheel', function (e) {
     e.preventDefault();
-    var rect = svg.getBoundingClientRect();
-    var cx = vb.x + ((e.clientX - rect.left) / rect.width) * vb.w;
-    var cy = vb.y + ((e.clientY - rect.top) / rect.height) * vb.h;
-    zoom(e.deltaY < 0 ? 0.85 : 1.18, cx, cy);
+    var p = toWorld(e.clientX, e.clientY);
+    zoomBy(e.deltaY < 0 ? 0.87 : 1.15, p.x, p.y);
   }, { passive: false });
 
   function pick(target) {
@@ -623,53 +930,36 @@ button:hover{border-color:var(--muted)}
     }
     return null;
   }
+  // Tapping a green marker picks that entrance. Tapping a room or photo point selects it.
+  function act(m) { if (m.kind === 'entrance') { setFrom(m.id); } else { choose(m); } }
   svg.addEventListener('click', function (e) {
     if (moved) { moved = false; return; }
     var m = pick(e.target);
     if (m) { act(m); }
   });
   svg.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      var m = pick(e.target);
-      if (m) { e.preventDefault(); act(m); }
-    }
-  });
-  // Tapping an IN marker picks that entrance. Tapping a room or photo point selects it.
-  function act(m) {
-    if (m.kind === 'entrance') { setFrom(m.id); } else { choose(m); }
-  }
-
-  document.getElementById('zin').addEventListener('click', function () { zoom(0.7); });
-  document.getElementById('zout').addEventListener('click', function () { zoom(1.4); });
-  document.getElementById('zreset').addEventListener('click', function () {
-    vb = { x: FULL.x, y: FULL.y, w: FULL.w, h: FULL.h }; setVB();
+    if (e.key === 'Enter' || e.key === ' ') { var m = pick(e.target); if (m) { e.preventDefault(); act(m); } }
   });
 
-  var q = document.getElementById('q');
-  q.addEventListener('input', function () { query = q.value; refresh(); });
-  q.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') {
-      var res = search(query);
-      if (res.length) { choose(res[0]); }
-    }
-  });
+  if (window.ResizeObserver) { new ResizeObserver(function () { applyView(); }).observe(svg); }
+  else { window.addEventListener('resize', applyView); }
 
+  // ---------- Start ----------
   draw();
-  buildLegend();
-  buildFromPicker();
-  buildProgress();
-  setVB();
+  build();
+  renderFoot();
 
-  // Start-up: a link like ?from=E-S-WEST&room=S03 wins, otherwise the last entrance used.
-  var start = readUrl();
-  var saved = '';
-  try { saved = localStorage.getItem('stokes-from') || ''; } catch (e) { /* storage blocked: fine */ }
+  var start = readUrl(), saved = '', savedTheme = '';
+  try { saved = localStorage.getItem('stokes-from') || ''; savedTheme = localStorage.getItem('stokes-theme') || ''; } catch (e) { /* storage blocked: fine */ }
+  setTheme(savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
   from = entranceById(start.from) ? start.from : (entranceById(saved) ? saved : '');
-  document.getElementById('from').value = from;
+  $('from').value = from;
   accessible = start.accessible === '1';
-  document.getElementById('accessible').checked = accessible;
+  $('accessible').checked = accessible;
   ROOMS.forEach(function (r) { if (r.id === start.room) { sel = { kind: 'room', o: r }; } });
   SPOTS.forEach(function (s) { if (s.id === start.spot) { sel = { kind: 'spot', o: s }; } });
+  if (sel) { input.value = titleOf(sel); }
+  showAll(false);
   update(!!sel);
 })();
 </script>

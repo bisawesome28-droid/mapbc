@@ -184,5 +184,83 @@ test('a broken edge (typo in a node id) is reported, not silently ignored', func
   assert.ok(g.problems.some(function (p) { return p.indexOf('ZZ') > -1; }));
 });
 
+// ---------- Directions (turn-by-turn) ----------
+//
+//   IN ---- A (corner) ----- B          Walk east from the entrance, turn south at the corner.
+//                 |
+//                 C (door on the east side of the hall)
+var L = {
+  nodes: [
+    { id: 'A', x: 100, y: 0, name: 'The corner' },
+    { id: 'B', x: 200, y: 0, name: 'East end' },
+    { id: 'C', x: 100, y: 200, name: 'South end' }
+  ],
+  edges: [{ from: 'A', to: 'B' }, { from: 'A', to: 'C' }]
+};
+var lEntr = { id: 'IN', name: 'Front door', x: 0, y: 0 };
+function lRoute(doorXY) {
+  var rm = { id: 'R', name: 'Room R', doors: [doorXY] };
+  var g = ML.buildGraph(L, [rm], [lEntr], []);
+  var r = ML.routeTo(g, 'IN', { kind: 'room', o: rm });
+  return ML.describe(g, r, 'Room R', { feetPerUnit: 1 });
+}
+
+test('directions start with the entrance and end with the room', function () {
+  var d = lRoute([130, 150]);
+  assert.strictEqual(d.steps[0].text, 'Start at Front door');
+  assert.strictEqual(d.steps[d.steps.length - 1].kind, 'arrive');
+  assert.ok(/Room R$/.test(d.steps[d.steps.length - 1].text));
+});
+
+test('walking south, a door on the east side is on your left', function () {
+  // Walking south down the hall, a door on the east side (x bigger) is on your LEFT.
+  var d = lRoute([130, 150]);
+  var last = d.steps[d.steps.length - 1];
+  assert.ok(/^Turn left/.test(last.text), last.text);
+  assert.strictEqual(last.turn, 'left');
+});
+
+test('a door on the west side, walking south, is a right turn', function () {
+  var d = lRoute([70, 150]);
+  assert.ok(/^Turn right/.test(d.steps[d.steps.length - 1].text));
+});
+
+test('the corner gives a right turn (east then south)', function () {
+  var d = lRoute([100, 190]);
+  var texts = d.steps.map(function (s) { return s.text; }).join(' | ');
+  assert.ok(/Turn right toward South end/.test(texts) || /Turn right to Room R/.test(texts), texts);
+});
+
+test('distance and time are worked out from the scale', function () {
+  var rm = { id: 'R', name: 'Room R', doors: [[100, 190]] };
+  var g = ML.buildGraph(L, [rm], [lEntr], []);
+  var r = ML.routeTo(g, 'IN', { kind: 'room', o: rm });
+  var d1 = ML.describe(g, r, 'Room R', { feetPerUnit: 1 });
+  var d2 = ML.describe(g, r, 'Room R', { feetPerUnit: 2 });
+  assert.ok(Math.abs(d1.feet - 290) <= 10, 'about 100 + 190 feet, got ' + d1.feet);
+  assert.ok(Math.abs(d2.feet - 2 * d1.feet) <= 10);
+  assert.ok(d2.minutes >= d1.minutes && d1.minutes >= 1);
+});
+
+test('every real route can be turned into directions', function () {
+  var fpu = D.SCALE.feetPerUnit;
+  D.ENTRANCES.forEach(function (en) {
+    D.ROOMS.forEach(function (rm) {
+      var r = ML.routeTo(graph, en.id, { kind: 'room', o: rm });
+      var d = ML.describe(graph, r, rm.name, { feetPerUnit: fpu });
+      assert.ok(d.steps.length >= 2, en.id + ' to ' + rm.id);
+      d.steps.forEach(function (s) { assert.ok(s.text.indexOf('undefined') === -1, s.text); });
+    });
+  });
+});
+
+test('nearest picks the closest restroom for each wing', function () {
+  var rests = D.ROOMS.filter(function (r) { return /restroom/i.test(r.name); });
+  var fromSouth = ML.nearest(graph, 'E-S-WEST', rests.map(function (o) { return { kind: 'room', o: o }; }));
+  var fromNorth = ML.nearest(graph, 'E-N-SOUTH', rests.map(function (o) { return { kind: 'room', o: o }; }));
+  assert.strictEqual(fromSouth.target.o.id, 'S-REST');
+  assert.strictEqual(fromNorth.target.o.id, 'N-REST');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
