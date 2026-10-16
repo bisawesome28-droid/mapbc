@@ -50,8 +50,8 @@ and plan to pitch schools to supply their own floor plans. Stokes Hall Level 1 i
   Stokes door, to the building's OpenStreetMap entrance if it has one, else to the walkway nearest its middle. Tapping a building works too.
 - The route finder uses a priority queue (fast on thousands of points); a test checks it gives the same answers as the simple method.
 - Inside the building, GPS is too rough, so "My location" starts from the nearest door instead.
-- **When the inside shows:** only once Stokes fills more than half of the screen (its width or its height, whichever is bigger,
-  measured on screen: `buildingFill()` in index.html, `SHOW_INSIDE_AT = 0.5`). It fades in over the next 6% so it does not pop.
+- **When the inside shows:** only once you have zoomed in past the whole building (its width or its height, whichever is bigger,
+  is at least as big as the screen: `buildingFill()` in index.html, `SHOW_INSIDE_AT = 1.0`). It fades in over the next 15% so it does not pop.
   The rule is the same with or without a room or route selected, and on a phone or a laptop. The page opens further out than that,
   so you see campus first; the "All" button, picking a room, or tapping the maroon building zooms in far enough to show it.
 - **Version label:** the footer of the page says "Map version ..." (`VERSION` in index.html). Bump it whenever you publish a change.
