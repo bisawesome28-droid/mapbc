@@ -1,46 +1,46 @@
 id,door_number,name,type,wing,nearest_landmark,directions,verified,photo_file,where_on_plan
-S01,,Classroom S01,classroom,South,,,no,,"South wing, top-left corner, tiered seating, left of S02"
-S02,,Classroom S02,classroom,South,,,no,,"South wing, top-left, flat seating, right of S01"
-S03,,Classroom S03,classroom,South,,,no,,"South wing, west side, middle, tiered seating"
-S04,,Classroom S04,classroom,South,,,no,,"South wing, west side, lower, flat seating"
-S05,,Classroom S05,classroom,South,,,no,,"South wing, bottom left of center, tiered seating"
-S06,,Classroom S06,classroom,South,,,no,,"South wing, south side, first of three in a row (west)"
-S07,,Classroom S07,classroom,South,,,no,,"South wing, south side, middle of the row of three"
-S08,,Classroom S08,classroom,South,,,no,,"South wing, south side, last of three (east)"
-S09,,Classroom S09,classroom,South,,,no,,"South wing, center-east, upper of two stacked rooms"
-S10,,Classroom S10,classroom,South,,,no,,"South wing, center-east, lower of the two stacked rooms"
-S11,,Large tiered classroom S11,classroom,South,,,no,,"South wing, east side, largest tiered classroom, near the connector"
-S-ADV-N,,Advising offices (north row),office,South,,,no,,
+S01,S115,Classroom,classroom,South,,,no,,"South wing, top-left corner, tiered seating, next to S117"
+S02,S117,Classroom,classroom,South,,,no,,"South wing, top-left, flat seating, next to S115"
+S03,S113,Classroom,classroom,South,,,no,,"South wing, west side, middle, tiered seating"
+S04,S111,Classroom,classroom,South,,,no,,"South wing, west side, lower, flat seating"
+S05,S109,Classroom,classroom,South,,,no,,"South wing, bottom left of center, tiered seating"
+S06,S107,Classroom,classroom,South,,,no,,"South wing, south side, first of three in a row (west)"
+S07,S105,Classroom,classroom,South,,,no,,"South wing, south side, middle of the row of three"
+S08,S103,Classroom,classroom,South,,,no,,"South wing, south side, last of three (east)"
+S09,S133,Classroom,classroom,South,,,no,,"South wing, center-east, upper of two stacked rooms"
+S10,S131,Classroom,classroom,South,,,no,,"South wing, center-east, lower of the two stacked rooms"
+S11,S195,Large tiered classroom,classroom,South,,,no,,"South wing, east side, largest tiered classroom, near the connector"
+S-ADV-N,,Advising offices (west row),office,South,,,no,,
 S-ADV-M,,Advising offices and workstations,office,South,,,no,,
-S-ADV-S,,Advising offices (south row),office,South,,,no,,
-S-SEM,,Seminar room,office,South,,,no,,
-S-SEAT,,Seating and reception,common,South,,,no,,
+S-ADV-S,,Advising offices (east row),office,South,,,no,,
+S-SEM,S139,Seminar room,office,South,,,no,,
+S-SEAT,S189,Seating and reception,common,South,,,no,,
 S-LOBBY,,Building lobby,common,South,,,no,,
-S-CAFE,,Cafe and common area,common,South,,,no,,
-S-STAIR-W,,"Stair (west-center, south wing)",core,South,,,no,,
-S-STAIR-NE,,"Stair (north-east, south wing)",core,South,,,no,,
-S-STAIR-E,,"Stair (east side, near connector)",core,South,,,no,,
+S-CAFE,S102,Cafe and common area,common,South,,,no,,
+S-STAIR-W,,"Stair 1, south end (south wing)",core,South,,,no,,
+S-STAIR-NE,,"Stair 2 (south wing, north-west corner)",core,South,,,no,,
+S-STAIR-E,,"Stair 1, north end (south wing, near the walkway)",core,South,,,no,,
 S-REST,,Restrooms (south wing),core,South,,,no,,
 S-ELEV,,Elevator (south wing),core,South,,,no,,
-CONN,,Connector bridge,connector,Connector,,,no,,
-N01,,Classroom N01,classroom,North,,,no,,"North wing, top, tiered seating, north end"
-N02,,Classroom N02,classroom,North,,,no,,"North wing, east side, upper, flat seating"
-N03,,Classroom N03,classroom,North,,,no,,"North wing, west column, first classroom from the top"
-N04,,Classroom N04,classroom,North,,,no,,"North wing, west column, second from the top"
-N05,,Classroom N05,classroom,North,,,no,,"North wing, west column, third from the top"
-N06,,Classroom N06,classroom,North,,,no,,"North wing, west column, bottom, near the south entry"
-N07,,Classroom N07,classroom,North,,,no,,"North wing, south end, left of the pair"
-N08,,Classroom N08,classroom,North,,,no,,"North wing, south-east corner"
-N-PULSE,,Pulse (reception and offices),office,North,,,no,,
+CONN,,Outdoor walkway between the wings,connector,Connector,,,no,,
+N01,N103,Classroom,classroom,North,,,no,,"North wing, top, tiered seating, north end"
+N02,N101,Classroom,classroom,North,,,no,,"North wing, east side, upper, flat seating"
+N03,N115,Classroom,classroom,North,,,no,,"North wing, west column, first classroom from the top"
+N04,N117,Classroom,classroom,North,,,no,,"North wing, west column, second from the top"
+N05,N121,Classroom,classroom,North,,,no,,"North wing, west column, third from the top"
+N06,N131,Classroom,classroom,North,,,no,,"North wing, west column, bottom, near the south entry"
+N07,N141,Classroom,classroom,North,,,no,,"North wing, south end, left of the pair"
+N08,N145,Classroom,classroom,North,,,no,,"North wing, south-east corner"
+N-PULSE,N125,Pulse (reception and offices),office,North,,,no,,
 N-IT,,IT suite,it,North,,,no,,
 N-SVC,,Service center,service,North,,,no,,
 N-CONF,,Conference room (dean and graduate),conf,North,,,no,,
 N-ELEV,,Elevators (north wing),core,North,,,no,,
 N-REST,,Restrooms (north wing),core,North,,,no,,
-N-STAIR-N,,"Stair (north, north wing)",core,North,,,no,,
-N-STAIR-S,,"Stair (south, north wing)",core,North,,,no,,
-N-VEST-W,,Bridge-side vestibule,common,North,,,no,,
-N-VEST-S,,South entry vestibule,common,North,,,no,,
+N-STAIR-N,,"Stair 3 (north wing, west end)",core,North,,,no,,
+N-STAIR-S,,"Stair 4 (north wing, east end)",core,North,,,no,,
+N-VEST-W,,"South entry vestibule (north wing, walkway side)",common,North,,,no,,
+N-VEST-S,,East entry vestibule (north wing),common,North,,,no,,
 N-SVC-ENT,,Service entrance,core,North,,,no,,
 P-LOBBY,,South wing building lobby,photo point,,,,no,,
 P-CAFE-ENT,,South entrance by the cafe,photo point,,,,no,,

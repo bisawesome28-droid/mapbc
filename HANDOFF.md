@@ -125,7 +125,17 @@ Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons nee
 - Works on phones (pinch to zoom) and has a light/dark switch.
 
 ## Current state
-- Room ids S01-S11 and N01-N08 are placeholders. Do not change "id". Put the real number in "door". BC writes Stokes rooms as number + wing letter, for example "door": "195S". Search, labels and routes pick it up.
+- Room ids S01-S11 and N01-N08 are internal names. Do not change "id". The real number is in "door", written as on the signs: wing letter + number, like "S195". Search, labels and routes use it.
+- **Level 1 room numbers (Oct 16, 2026)** come from the fire department plans posted in Stokes (photos kept locally, `*.HEIC` is in .gitignore). 23 are filled in: all 19 classrooms plus S139, S189, S102 and N125 (Pulse). The south wing's fire plan is drawn the same way round as the brochure; the north wing's is turned a quarter turn (its entries N105 and N135 and stairs 3 and 4 confirm which way). Not filled in: the advising, IT, service and conference areas (several small rooms each, could not be matched one to one), and the lobby, which the sign also labels "S103", the same as the classroom next to it, so check its real number on site. Entry vestibules on the plans: S112 (west door), S185 (north door), N105 (walkway side), N135 (east end).
+- **Levels 2 to 4 (Oct 16, 2026)** are traced from photos of the fire department plans posted in Stokes (kept locally, not committed):
+  about 325 rooms with their real numbers (S2xx to S4xx, N2xx to N4xx), the outside walls, hallways, stairs and elevators, and the
+  enclosed bridge (Level 2; Level 3 has one too, marked as a guess because it is not drawn the same way on the plan). How: each photo was
+  lined up with the traced Level 1 using the stairs and elevators (they sit in the same place on every floor), a program read the
+  room-number labels, and each room's outline was cut from the walls in the photo. **Guesses to check on site:** what each room is
+  (rooms are called Classroom, Seminar or meeting room, or Office by size only, `useGuess: true`); door positions (put on the wall
+  nearest a hallway); the hallway lines; room shapes (squared up where nearly rectangular, a bit lumpy otherwise); and the Level 3
+  bridge. The basement and penthouse plans were also photographed but are not traced.
+  Redo it with the scripts' method if the plans change: the tracing scripts are not in the repo (they were scratch work).
 - The plan is traced from the Stokes Level 1 brochure at full size (2722 x 1812 pixels). Map coordinates in data.js are pixel positions on that image, so you can check any point by opening the image. Don't publish the brochure image. It is ignored by git (keep it in reference/stokes-level1-brochure.png).
 - Level 1 has no indoor link between the wings. The architect describes the enclosed bridge as being on Level 2, with walkways at ground level, so routes between wings go outside and the page says so.
 - Seating rows, stair treads, elevator X marks and restroom symbols are drawn from simple rules ("seating", "stair", "cars", "restroom" in data.js). They show the kind of room, not exact furniture.
@@ -142,8 +152,9 @@ The crosshair button shows where you are, anywhere on campus, with a faint circl
 
 ## Floors (levels)
 - `window.LEVELS` in data.js lists the floors. Anything without a `"level"` is on Level 1.
-- Level 2 is a placeholder for now. It has the outside walls (dashed, copied from Level 1), the 5 staircases and
-  2 elevators directly above their Level 1 spots, the enclosed bridge, and a skeleton of hallways. All are guesses.
+- Levels 2, 3 and 4 are traced from the posted fire department plans (see "Levels 2 to 4" above): rooms with real numbers, hallways,
+  and the 5 staircases and 2 elevators directly above their Level 1 spots. The south wing's Stair 1 north end only goes between Levels 1 and 2 (it is not on Levels 3 and 4 in the plans);
+  the other stairs and the elevators go all the way up.
 - How floors connect: a stair or elevator is a pair of points, one on each floor, joined by an edge with
   `"kind": "stair"` or `"kind": "elevator"` and a `"length"` (how "far" the trip feels: stairs 160, elevator 300,
   so the router weighs waiting for an elevator against walking). Example from data.js:
@@ -177,7 +188,7 @@ feetPerUnit to real feet divided by 1265. Time assumes an easy 240 feet per minu
 
 ## Next steps
 0. Walk around outside Stokes with the page on https (GitHub Pages) and check the blue dot and the route in. Add missing entrances in OpenStreetMap.
-1. Get real room numbers and door positions (the evacuation floor plans in the building should have them).
+1. Level 1 room numbers are in (from the posted fire plans). Still to do: door positions, the lobby's number, and the office suites. Walk Levels 2 to 4 to check the guesses listed above.
 2. Walk the building and fix the guesses listed above. Set "guess": false or "verified": true as you go.
 3. Test with ~5 freshmen against BC's map and log hours per building.
 
@@ -185,18 +196,16 @@ feetPerUnit to real feet divided by 1265. Time assumes an easy 240 feet per minu
 
 ### Project status
 - Stokes Hall Level 1 is traced from the brochure as a real floor plan (walls, doors, stairs, seating).
-  Room IDs S01-S11 and N01-N08 are placeholders. Real numbers go in the "door" field using BC's format
-  (number + wing letter, like 195S).
-- Level 2 is a placeholder floor: outside walls, 5 staircases, 2 elevators, the enclosed bridge, and a
-  hallway skeleton, all guesses. Floors connect through "stair" and "elevator" edges. Step-free routes
-  use elevators only.
+  Real room numbers (from the fire department plans posted in Stokes) are in the "door" field, like S195.
+- Levels 2 to 4 are traced from the posted fire department plans. Floors connect through "stair" and "elevator" edges.
+  Step-free routes use elevators only.
 - On Level 1 there is no indoor link between the wings. Routes between wings go outside on the walkway
   (the enclosed bridge is on Level 2, according to the architect).
 - Still needed:
-  - real room numbers (from the evacuation maps posted in the building)
+  - the lobby's number and the office suite numbers (Level 1 classroom numbers are done)
   - a walk-through to check door positions and guessed hallways
   - measuring one hallway to fix the distance scale
-  - a photo of a Level 2 floor plan
+  - check Levels 2 to 4 on site (they are traced from the posted fire plans; room types and door spots are guesses)
 
 ### Growth plan (decided)
 - Keep building it as a plain static website on GitHub Pages for now. This scales to lots of users for free.

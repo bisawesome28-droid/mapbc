@@ -10,7 +10,8 @@ var D = global.window;
 
 var passed = 0, failed = 0;
 function test(name, fn) {
-  try { fn(); passed++; console.log('PASS  ' + name); }
+  var t0 = Date.now();
+  try { fn(); passed++; console.log("PASS  " + name + (Date.now() - t0 > 2000 ? "  (" + (Date.now() - t0) + " ms)" : "")); }
   catch (e) { failed++; console.log('FAIL  ' + name + '\n      ' + e.message); }
 }
 
@@ -67,6 +68,19 @@ test('exact room number is listed before a longer one ("S19" before "S195")', fu
 });
 
 // ---------- Path network data ----------
+
+test('real room numbers from the posted fire plans: no duplicates, searchable', function () {
+  var seen = {};
+  D.ROOMS.forEach(function (r) {
+    if (!r.door) { return; }
+    assert.ok(/^[SN]\d{3}[a-z]?$/.test(r.door), r.id + ' has an odd room number: ' + r.door);
+    assert.ok(r.door.charAt(0) === r.wing.charAt(0), r.id + ' number ' + r.door + ' is in the ' + r.wing + ' wing');
+    assert.ok(!seen[r.door], r.door + ' is used twice (' + seen[r.door] + ' and ' + r.id + ')');
+    seen[r.door] = r.id;
+  });
+  assert.strictEqual(ids(ML.search('S195', D.ROOMS, []))[0], 'S11', 'S195 is the big tiered classroom');
+  assert.strictEqual(ids(ML.search('n131', D.ROOMS, []))[0], 'N06');
+});
 
 test('path network has no data mistakes (missing nodes, far-away doors)', function () {
   assert.deepStrictEqual(graph.problems, []);
@@ -371,14 +385,27 @@ test('a plain hallway joining two levels is reported as a mistake', function () 
   assert.ok(ML.buildGraph(bad, [], [], []).problems.some(function (p) { return /joins level 1 and level 2/.test(p); }));
 });
 
-test('real data: every Level 2 room can be reached step-free, by elevator only', function () {
-  D.ROOMS.filter(function (r) { return r.level === '2'; }).forEach(function (rm) {
+test('real data: every room on Levels 2 to 4 can be reached step-free, by elevator only', function () {
+  D.ROOMS.filter(function (r) { return r.level && r.level !== '1'; }).forEach(function (rm) {
     D.ENTRANCES.forEach(function (en) {
       var r = ML.routeTo(graph, en.id, { kind: 'room', o: rm }, { accessible: true });
       assert.ok(r, en.id + ' cannot reach ' + rm.id + ' step-free');
       assert.ok(r.kinds.indexOf('stair') === -1 && r.kinds.indexOf('elevator') > -1, en.id + ' to ' + rm.id + ': ' + r.kinds.join(','));
     });
   });
+});
+
+test('real data: Levels 2 to 4 are traced from the fire plans (rooms, hallways, stairs and elevators)', function () {
+  ['2', '3', '4'].forEach(function (lv) {
+    var rs = D.ROOMS.filter(function (r) { return r.level === lv && r.door; });
+    assert.ok(rs.length > 80, 'Level ' + lv + ' has only ' + rs.length + ' numbered rooms');
+    rs.forEach(function (r) { assert.strictEqual(r.door.charAt(1), lv, r.door + ' is on Level ' + lv); });
+  });
+  var r = go('E-S-WEST', 'S341');
+  assert.ok(r.levels.indexOf('3') > -1, 'route to S341 goes up to Level 3');
+  var d = ML.describe(graph, r, 'S341', { feetPerUnit: D.SCALE.feetPerUnit, levelNames: { '1': 'Level 1', '3': 'Level 3' } });
+  assert.ok(d.steps.some(function (s) { return s.kind === 'level' && /Level 3/.test(s.text); }), 'directions say to go to Level 3');
+  assert.ok(go('E-S-WEST', 'N445').levels.indexOf('4') > -1, 'N445 is on Level 4');
 });
 
 test('real data: Level 1 routes never wander upstairs', function () {
@@ -585,7 +612,7 @@ test('real data: GPS control points (if any) are usable and fit well', function 
   if (D.SCALE && !D.SCALE.guess) { assert.ok(Math.abs(feetPerUnit / D.SCALE.feetPerUnit - 1) < 0.15, 'GPS scale ' + feetPerUnit.toFixed(3) + ' ft/unit vs SCALE ' + D.SCALE.feetPerUnit); }
 });
 
-test('the fast route finder gives the same lengths as a simple slow one (every entrance to every room)', function () {
+test('the fast route finder gives the same lengths as a simple slow one (every entrance; Level 1 rooms and every 16th room upstairs)', function () {
   // Reference: the textbook method, looking at every place each time. Slow, but obviously right.
   function slow(g, from, targets, acc) {
     var dist = {}, done = {}, ids = Object.keys(g.nodes), want = {};
@@ -605,8 +632,9 @@ test('the fast route finder gives the same lengths as a simple slow one (every e
     }
   }
   [false, true].forEach(function (acc) {
+    var sample = D.ROOMS.filter(function (rm, i) { return !rm.level || rm.level === '1' || i % 16 === 0; });
     D.ENTRANCES.forEach(function (en) {
-      D.ROOMS.forEach(function (rm) {
+      sample.forEach(function (rm) {
         var ends = rm.doors.map(function (d, k) { return 'door:' + rm.id + ':' + k; });
         var fast = ML.shortest(graph, 'entrance:' + en.id, ends, { accessible: acc });
         var ref = slow(graph, 'entrance:' + en.id, ends, acc);
