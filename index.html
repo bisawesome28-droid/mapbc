@@ -184,6 +184,9 @@ dd.none{color:var(--muted)}
 #map.z-in .wing{display:none}
 /* Labels undo the building's turn so they always read upright. */
 #map .rlabel,#map .fixl,#map .wing{transform-box:fill-box;transform-origin:center;transform:rotate(var(--rot,0deg))}
+.bl{font:600 11px/1.15 Inter,system-ui,sans-serif;color:#44506b;text-align:center;max-width:90px;pointer-events:none;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff;opacity:0;transition:opacity .2s}
+#map-wrap.bl-on .bl,.maplibregl-map.bl-on .bl{opacity:1}
+:root[data-theme="dark"] .bl{color:#c9d3ea;text-shadow:0 0 3px #10141f,0 0 3px #10141f}
 .you-dot-el{width:18px;height:18px;border-radius:50%;background:#0a6cff;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
 .you-dot-el::after{content:"";position:absolute;inset:-3px;border-radius:50%;background:#0a6cff;opacity:.35;animation:ping2 2s ease-out infinite;z-index:-1}
 @media (prefers-reduced-motion:reduce){.you-dot-el::after{animation:none;display:none}}
@@ -422,7 +425,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 f'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 g'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -848,6 +851,7 @@ dd.none{color:var(--muted)}
     u = 1 / Math.sqrt(a * a + b * b);
     svg.style.setProperty('--u', u.toFixed(4));
     svg.style.setProperty('--rot', (-Math.atan2(b, a) * 180 / Math.PI).toFixed(2) + 'deg');
+    map.getContainer().classList.toggle('bl-on', map.getZoom() >= 16.6);
     svg.classList.toggle('z-in', u < 1.3);
     svg.classList.toggle('labels', u < 3.6);
     // Zoomed out, Stokes looks like any other building. The inside shows only once the building fills
@@ -995,12 +999,27 @@ dd.none{color:var(--muted)}
     map.addSource('buildings', { type: 'geojson', data: CDATA.buildings || EMPTY });
     map.addSource('paths', { type: 'geojson', data: CDATA.paths || EMPTY });
     map.addSource('foot', { type: 'geojson', data: footprint() });
+    // Building names (the base map's own names are hidden under our building shapes).
+    (CDATA.buildings && CDATA.buildings.features || []).forEach(function (f) {
+      var n = f.properties && f.properties.name;
+      if (!n || isStokes(n)) { return; }
+      var el = document.createElement('div'); el.className = 'bl'; el.textContent = n;
+      new maplibregl.Marker({ element: el }).setLngLat(bldgCenter(f)).addTo(map);
+    });
     map.addSource('route-out', { type: 'geojson', data: EMPTY });
     map.addSource('you-acc', { type: 'geojson', data: EMPTY });
 
     // Campus buildings are already drawn by the base map. This layer is nearly invisible: it is there so
     // a tap can tell which building you tapped, and to outline the one you picked. Stokes uses its own shape.
     var notStokes = ['!', ['in', 'Stokes Hall', ['coalesce', ['get', 'name'], '']]];
+    // Our own clean look on top of a quiet base map: soft walkways, and buildings with a fill and a crisp edge.
+    var light = ['!=', ['get', 'highway'], 'steps'];
+    map.addLayer({ id: 'walk-casing', type: 'line', source: 'paths', filter: light, layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#b9c0cc', 'line-opacity': 0.55, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 19, 7, 21, 14] } });
+    map.addLayer({ id: 'walk', type: 'line', source: 'paths', filter: light, layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 0.8, 19, 4.5, 21, 10] } });
+    map.addLayer({ id: 'buildings-fill', type: 'fill', source: 'buildings', filter: notStokes, paint: { 'fill-color': '#c4cde0', 'fill-opacity': 0.92 } });
+    map.addLayer({ id: 'buildings-edge', type: 'line', source: 'buildings', filter: notStokes, paint: { 'line-color': '#7f8cab', 'line-opacity': 0.9, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 0.6, 19, 1.6] } });
     map.addLayer({ id: 'buildings', type: 'fill', source: 'buildings', filter: notStokes, paint: { 'fill-color': '#0a6cff', 'fill-opacity': 0.01 } });
     map.addLayer({ id: 'building-sel', type: 'line', source: 'buildings', filter: ['==', ['get', 'osm'], ''], paint: { 'line-color': '#0a6cff', 'line-width': 3 } });
     // Walking paths. Steps are dashed red so you can see where a route is not step-free.
@@ -1031,10 +1050,18 @@ dd.none{color:var(--muted)}
   function mapTheme() {
     if (!map || !map.getLayer('base')) { return; }
     var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    map.setPaintProperty('base', 'raster-brightness-min', dark ? 0.9 : 0);
-    map.setPaintProperty('base', 'raster-brightness-max', dark ? 0.12 : 1);
-    map.setPaintProperty('base', 'raster-saturation', dark ? -0.55 : 0);
+    // A quiet, washed-out base so our own buildings, walkways and route stand out.
+    map.setPaintProperty('base', 'raster-brightness-min', dark ? 0.78 : 0.25);
+    map.setPaintProperty('base', 'raster-brightness-max', dark ? 0.14 : 1);
+    map.setPaintProperty('base', 'raster-saturation', dark ? -0.8 : -0.6);
+    map.setPaintProperty('base', 'raster-contrast', dark ? 0 : -0.3);
     map.setPaintProperty('base', 'raster-hue-rotate', dark ? 180 : 0);
+    if (map.getLayer('buildings-fill')) {
+      map.setPaintProperty('buildings-fill', 'fill-color', dark ? '#2a3550' : '#c4cde0');
+      map.setPaintProperty('buildings-edge', 'line-color', dark ? '#5c6c93' : '#7f8cab');
+      map.setPaintProperty('walk', 'line-color', dark ? '#46506a' : '#ffffff');
+      map.setPaintProperty('walk-casing', 'line-color', dark ? '#1b2234' : '#b9c0cc');
+    }
   }
 
   function highlightBuilding() {
