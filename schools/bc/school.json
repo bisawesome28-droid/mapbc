@@ -8,5 +8,5 @@
   "zoom": 16,
   "basemap": "osm-dev",
   "campus": {"data": "campus/data.json", "base": "campus/base.json", "extras": "campus/extras.json"},
-  "buildings": ["stokes", "mcelroy"]
+  "buildings": ["stokes", "mcelroy", "oneill"]
 }

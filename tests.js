@@ -650,6 +650,49 @@ test('real data: GPS control points (if any) are usable and fit well', function 
   if (D.SCALE && !D.SCALE.guess) { assert.ok(Math.abs(feetPerUnit / D.SCALE.feetPerUnit - 1) < 0.15, 'GPS scale ' + feetPerUnit.toFixed(3) + ' ft/unit vs SCALE ' + D.SCALE.feetPerUnit); }
 });
 
+test('search: a room whose name matches comes before one that only has it in its keywords', function () {
+  var rooms = [{ id: 'A', door: 'A', name: 'Digitization Lab', keywords: 'digitization scanning lab' }, { id: 'B', door: 'B', name: 'Scan Lab', keywords: '' }];
+  assert.deepStrictEqual(ids(ML.search('scan lab', rooms)), ['B', 'A']);
+  assert.strictEqual(ids(ML.search('A', rooms))[0], 'A'); // an exact room number still comes first
+});
+
+// Every building of every school: these run for each new building file without anyone adding a test.
+SCHOOLS.forEach(function (sc) {
+  sc.buildings.forEach(function (b) {
+    var name = sc.school.id + '/' + b.id;
+    test(name + ': loads with no data problems', function () {
+      assert.deepStrictEqual(b.problems, []);
+    });
+    test(name + ': GPS points fit the plan within a few metres', function () {
+      var pts = (b.geo && b.geo.points) || [];
+      assert.ok(pts.length >= 2, 'needs at least 2 GPS points ("geo")');
+      var g = ML.fitGeo(pts);
+      assert.ok(g, 'GPS points need numeric lat, lng, x and y');
+      if (g.rmsMeters !== null) { assert.ok(g.rmsMeters < 5, 'GPS points miss by ' + g.rmsMeters.toFixed(1) + ' m; check point ' + g.worstIndex); }
+    });
+    test(name + ': every room can be reached from every entrance', function () {
+      var bad = [];
+      (b.entrances || []).forEach(function (en) {
+        b.rooms.forEach(function (r) {
+          if (!(r.doors && r.doors.length)) { return; }
+          if (!ML.routeTo(b.graph, en.id, { kind: 'room', o: r })) { bad.push(en.id + ' -> ' + r.id); }
+        });
+      });
+      assert.ok((b.entrances || []).length > 0, 'no entrances');
+      assert.deepStrictEqual(bad.slice(0, 10), [], bad.length + ' rooms cannot be reached');
+    });
+    test(name + ': with an elevator, every room is reachable step-free', function () {
+      if (!b.rooms.some(function (r) { return r.cars; })) { return; }
+      var en = b.entrances[0], bad = [];
+      b.rooms.forEach(function (r) {
+        if (r.stair || !(r.doors && r.doors.length)) { return; }
+        if (!ML.routeTo(b.graph, en.id, { kind: 'room', o: r }, { accessible: true })) { bad.push(r.id); }
+      });
+      assert.deepStrictEqual(bad.slice(0, 10), [], bad.length + ' rooms have no step-free route from ' + en.id);
+    });
+  });
+});
+
 test('the fast route finder gives the same lengths as a simple slow one (every entrance; Level 1 rooms and every 16th room upstairs)', function () {
   // Reference: the textbook method, looking at every place each time. Slow, but obviously right.
   function slow(g, from, targets, acc) {

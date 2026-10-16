@@ -4,7 +4,7 @@
 // so a native app reuses everything in core/ and the data, and rewrites only this part.
 (function () {
   var ML = window.MapLogic, MI = window.MapIndoor, MS = window.MapSchool, STYLE = window.MapStyle;
-  var VERSION = '2026-10-16 r'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 t'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -177,9 +177,21 @@
       return Math.min(padding, w / 4, hh / 4);
     }
     // Moves the camera so a set of [lng, lat] points fills the view. Looking inside goes flat; keepTilt keeps the tilt.
-    function fitPoints(pts, padding, maxZoom, keepTilt) {
+    // minZoom (optional): zoom in at least this far, even if some points end up off screen.
+    function fitPoints(pts, padding, maxZoom, keepTilt, minZoom) {
       if (!map || !pts.length) { return; }
-      map.fitBounds(lngLatBounds(pts), { padding: padFor(padding), maxZoom: maxZoom || 21, pitch: keepTilt ? map.getPitch() : 0, duration: REDUCED ? 0 : 700 });
+      var o = { padding: padFor(padding), maxZoom: maxZoom || 21, pitch: keepTilt ? map.getPitch() : 0, duration: REDUCED ? 0 : 700 };
+      var cam = minZoom ? map.cameraForBounds(lngLatBounds(pts), o) : null;
+      if (cam && cam.zoom < minZoom) { map.easeTo({ center: cam.center, zoom: minZoom, pitch: o.pitch, duration: o.duration }); return; }
+      map.fitBounds(lngLatBounds(pts), o);
+    }
+    // The zoom at which a building fills the screen enough for its floor plan to show (see applyView), plus a little.
+    function zoomToOpen(b) {
+      var fr = ML.localFrame(b.center[1], b.center[0]), xy = b.footPoints.map(function (ll) { return fr.toXY(ll[1], ll[0]); });
+      var w = Math.max.apply(null, xy.map(function (q) { return q.x; })) - Math.min.apply(null, xy.map(function (q) { return q.x; }));
+      var hh = Math.max.apply(null, xy.map(function (q) { return q.y; })) - Math.min.apply(null, xy.map(function (q) { return q.y; }));
+      var c = map.getContainer(), mpp = Math.max(w / c.clientWidth, hh / c.clientHeight) / (SHOW_INSIDE_AT * 1.05); // metres per pixel
+      return Math.log(40075016.686 * Math.cos(b.center[1] * Math.PI / 180) / (512 * mpp)) / Math.LN2;
     }
     // Plan box [x0, y0, x1, y1] of a building -> its four corners as [lng, lat].
     function boxPoints(b, box) { return [[box[0], box[1]], [box[2], box[1]], [box[2], box[3]], [box[0], box[3]]].map(function (p) { return b.toLngLat(p[0], p[1]); }); }
@@ -634,7 +646,8 @@
       highlightBuilding();
       // A campus building or a walk outside keeps the 3D tilt (and does not zoom in too close); a room goes flat.
       var outside = (sel && sel.kind === 'building') || (outRoute && outRoute.lnglat && outRoute.lnglat.length);
-      fitPoints(corners, 80, outside ? 18.3 : 21, outside);
+      // Indoors, zoom in at least far enough that the floor plan opens (a big building like a library needs it).
+      fitPoints(corners, 80, outside ? 18.3 : 21, outside, !outside && b ? zoomToOpen(b) : 0);
     }
 
     // ---------- Your location (blue dot) ----------
@@ -699,7 +712,8 @@
     // ("B:" + its OpenStreetMap id).
     function isBuildingFrom(id) { return typeof id === 'string' && id.indexOf('B:') === 0; }
     function fromBuilding() { return isBuildingFrom(from) ? buildingByOsm(from.slice(2)) : null; }
-    function startLabel() { var b = fromBuilding(), en = entranceByKey(from); return b ? b.properties.name : (en ? en.name : 'your location'); }
+    var buildingStartName = ''; // set by outdoorStart: the building and which of its doors the walk starts from
+    function startLabel() { var b = fromBuilding(), en = entranceByKey(from); return b ? (buildingStartName || b.properties.name) : (en ? en.name : 'your location'); }
     // The point on a campus building's outline closest to where you are going, so a walk starts on the side facing it.
     function edgePointToward(f, towardLL) {
       var t = FRAME.toXY(towardLL[1], towardLL[0]), best = null, bd = Infinity;
@@ -708,11 +722,28 @@
       });
       return best;
     }
-    // Where an outdoor walk starts: your location, a campus building (the side facing "toward"), or a building's door.
+    // The mapped doors of a campus building (entrances within 8 m of its outline). A step-free route skips doors
+    // marked "wheelchair": "no" (a stairwell, say). Each is { id, ll: [lng, lat], name }.
+    function campusDoors(f) {
+      var rings = bldgRings(f), out = [];
+      ((CDATA.entrances || {}).features || []).forEach(function (e, i) {
+        var c = e.geometry.coordinates, pr = e.properties || {};
+        if (accessible && pr.wheelchair === 'no') { return; }
+        if (rings.some(function (r) { return metersToRing(c, r) < 8; })) { out.push({ id: 'B' + i, ll: c, name: pr.name || '' }); }
+      });
+      return out;
+    }
+    // Where an outdoor walk starts: your location, a campus building (its door, or else its side, facing "toward"),
+    // or a building's door.
     function outdoorStart(toward) {
       if (from === 'ME') { return you ? { ll: [you.lng, you.lat], name: 'Your location' } : null; }
       var f = fromBuilding();
-      if (f) { return { ll: edgePointToward(f, toward), name: f.properties.name }; }
+      if (f) {
+        var t = FRAME.toXY(toward[1], toward[0]), best = null, bd = Infinity;
+        campusDoors(f).forEach(function (d) { var q = FRAME.toXY(d.ll[1], d.ll[0]), dd = Math.hypot(q.x - t.x, q.y - t.y); if (dd < bd) { bd = dd; best = d; } });
+        buildingStartName = f.properties.name + (best && best.name ? ' (' + best.name + ')' : '');
+        return { ll: best ? best.ll : edgePointToward(f, toward), name: buildingStartName };
+      }
       var en = entranceByKey(from);
       return en ? { ll: bOf(en).toLngLat(en.x, en.y), name: en.name } : null;
     }
@@ -822,11 +853,7 @@
       if (fromBuilding() === f) { return; } // already there
       var st0 = outdoorStart(bldgCenter(f));
       if (!st0) { return; }
-      var net = outdoorNet(), st = FRAME.toXY(st0.ll[1], st0.ll[0]), rings = bldgRings(f), doors = [];
-      ((CDATA.entrances || {}).features || []).forEach(function (e, i) {
-        var c = e.geometry.coordinates;
-        if (rings.some(function (r) { return metersToRing(c, r) < 8; })) { doors.push({ id: 'B' + i, ll: c }); }
-      });
+      var net = outdoorNet(), st = FRAME.toXY(st0.ll[1], st0.ll[0]), doors = campusDoors(f);
       if (!doors.length) { doors.push({ id: 'B', ll: bldgCenter(f) }); }
       var pts = [{ id: 'START', name: st0.name, x: st.x, y: st.y }].concat(doors.map(function (d) {
         var p = FRAME.toXY(d.ll[1], d.ll[0]);
