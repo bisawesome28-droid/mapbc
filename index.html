@@ -216,7 +216,7 @@ dd.none{color:var(--muted)}
 #from[hidden]{display:none!important}
 #fromresults:empty{display:none}
 #fromresults{margin:-4px 0 4px}
-.floors{position:absolute;top:196px;right:12px;display:flex;flex-direction:column;overflow:hidden}
+.floors{position:absolute;bottom:44px;right:12px;display:flex;flex-direction:column;overflow:hidden}
 .floors button{width:40px;height:38px;border:0;background:transparent;font-size:15px;font-weight:800;color:var(--muted)}
 .floors button + button{border-top:1px solid var(--line)}
 .floors button:hover{background:var(--surface2);color:var(--fg)}
@@ -228,7 +228,7 @@ dd.none{color:var(--muted)}
 .levelbar button[aria-pressed=true]{background:var(--route);border-color:var(--route);color:#fff}
 .levelbar .blanknote{flex-basis:100%;text-align:center;color:var(--warn);font-weight:600;font-size:12.5px;max-width:520px}
 .levelbar .short{display:none}
-@media (max-width:899px){.levelbar{bottom:62px;width:calc(100% - 24px);padding:6px 8px}.levelbar .blanknote{font-size:11.5px}.levelbar .long{display:none}.levelbar .short{display:inline}}
+@media (max-width:899px){.floors{left:12px;right:auto;bottom:60px;flex-direction:row}.floors button{width:38px;height:36px}.floors button + button{border-top:0;border-left:1px solid var(--line)}.levelbar{bottom:104px;width:calc(100% - 24px);padding:6px 8px}.levelbar .blanknote{font-size:11.5px}.levelbar .long{display:none}.levelbar .short{display:inline}}
 .golevel{display:inline-block;margin-left:8px;border:1px solid var(--route);color:var(--route);background:transparent;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:700;vertical-align:1px}
 .golevel:hover{background:var(--route-soft)}
 .step.level .ico{background:var(--route-soft);color:var(--route);border-color:transparent}
@@ -437,7 +437,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 k'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 l'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
