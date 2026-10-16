@@ -431,7 +431,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 i'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 j'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -887,6 +887,7 @@ dd.none{color:var(--muted)}
     svg.style.opacity = op.toFixed(3);
     svg.style.display = op > 0 ? '' : 'none';
     renderHeader(op > 0);
+    $('legend').style.display = op > 0 ? '' : 'none'; // room colours only mean something looking inside
   }
 
   // How much of the screen the building fills: 0.5 means its width (or height) is half the map's width
@@ -1053,11 +1054,14 @@ dd.none{color:var(--muted)}
   }
 
   // Campus buildings with their heights (from base.js) for the 3D layer.
+  function hashOf(str) { var x = 7; for (var i = 0; i < str.length; i++) { x = (x * 31 + str.charCodeAt(i)) % 100003; } return x; }
   function buildingsWithHeights() {
     var hs = (BASE && BASE.heights) || {};
     (CDATA.buildings && CDATA.buildings.features || []).forEach(function (f) {
       var h = hs[f.properties.osm];
-      if (h) { f.properties.h = h.h; }
+      // A guessed height gets a little variety (up to 30% either way, the same every time) so rows of buildings
+      // are not all identical blocks. A real height from OpenStreetMap is used as is.
+      if (h) { f.properties.h = h.guess ? Math.round(h.h * (0.75 + (hashOf(f.properties.osm) % 6) * 0.1)) : h.h; }
     });
     return CDATA.buildings || EMPTY;
   }
@@ -1132,6 +1136,7 @@ dd.none{color:var(--muted)}
   function mapTheme() {
     if (!map || !map.getLayer('base')) { return; }
     var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (STYLE && STYLE.light) { map.setLight(STYLE.light[dark ? 'dark' : 'light']); }
     map.setPaintProperty('base', 'raster-brightness-min', dark ? 0.78 : 0.25);
     map.setPaintProperty('base', 'raster-brightness-max', dark ? 0.14 : 1);
     map.setPaintProperty('base', 'raster-saturation', dark ? -0.8 : -0.6);
@@ -1150,6 +1155,7 @@ dd.none{color:var(--muted)}
     if (!map || !map.getLayer('buildings-3d')) { return; }
     var c = palette(), id = sel && sel.kind === 'building' ? sel.o.properties.osm : '';
     map.setPaintProperty('buildings-3d', 'fill-extrusion-color', ['case', ['==', ['get', 'osm'], id], c.selected, c.building]);
+    map.setPaintProperty('buildings-roof', 'fill-extrusion-color', ['case', ['==', ['get', 'osm'], id], c.selectedTop, c.buildingTop]);
   }
 
   function drawOutRoute() {
@@ -1173,7 +1179,7 @@ dd.none{color:var(--muted)}
     if (m) { act(m); return; }
     // Not on the floor plan: did the tap land on a named campus building?
     // (The 3D layer first, so a tap on a tilted building's roof counts.)
-    var layers = ['buildings-3d', 'buildings'].filter(function (id) { return map.getLayer(id); });
+    var layers = ['buildings-3d', 'buildings-roof', 'buildings'].filter(function (id) { return map.getLayer(id); });
     var hit = layers.length ? map.queryRenderedFeatures(e.point, { layers: layers }) : [];
     for (var i = 0; i < hit.length; i++) {
       var f = buildingByOsm(hit[i].properties.osm);
