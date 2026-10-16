@@ -7,8 +7,9 @@
   else { root.MapLogic = api; }
 })(this, function () {
 
+  // Distances below are in map units. The map is about 2300 units wide (brochure pixels).
   // A door further than this from every hallway line is treated as a data mistake.
-  var MAX_SNAP = 45;
+  var MAX_SNAP = 100;
 
   // Edge kinds that a wheelchair user cannot take.
   var NOT_ACCESSIBLE = { steps: true, stair: true };
@@ -153,7 +154,8 @@
       var prev = e.from;
       e.stops.forEach(function (s, k) {
         var sid = 'snap:' + i + ':' + k;
-        addNode({ id: sid, x: s.x, y: s.y, name: nodes[e.from].name || nodes[e.to].name, kind: 'snap' });
+        // A join point is named after where its hallway leads ("to"), so edges are drawn pointing inward.
+        addNode({ id: sid, x: s.x, y: s.y, name: nodes[e.to].name || nodes[e.from].name, kind: 'snap' });
         link(prev, sid, e);
         link(sid, s.point, { kind: 'door', guess: false });
         prev = sid;
@@ -196,12 +198,16 @@
         if (distTo[e.to] == null || nd < distTo[e.to]) { distTo[e.to] = nd; prev[e.to] = { id: u, edge: e }; }
       });
     }
-    var path = [], usesGuess = false, cur = u;
+    var path = [], kinds = [], usesGuess = false, cur = u;
     while (cur) {
       path.unshift(cur);
-      if (prev[cur]) { if (prev[cur].edge.guess || graph.nodes[cur].guess) { usesGuess = true; } cur = prev[cur].id; }
-      else { cur = null; }
+      if (prev[cur]) {
+        kinds.unshift(prev[cur].edge.kind);
+        if (prev[cur].edge.guess || graph.nodes[cur].guess) { usesGuess = true; }
+        cur = prev[cur].id;
+      } else { cur = null; }
     }
+    kinds.unshift('');
     var names = [];
     path.forEach(function (id) {
       var n = graph.nodes[id].name;
@@ -211,6 +217,8 @@
       ids: path,
       points: path.map(function (id) { return [graph.nodes[id].x, graph.nodes[id].y]; }),
       length: distTo[u],
+      kinds: kinds,              // kinds[i] = kind of the edge that arrives at ids[i]
+      outdoor: kinds.indexOf('outdoor') > -1,
       usesGuess: usesGuess,
       names: names
     };
@@ -241,7 +249,8 @@
   // ---------- Turn-by-turn directions ----------
 
   var TURN_MIN = 30;       // a bend smaller than this many degrees counts as "straight on"
-  var SHORT_LEG = 10;      // a jog shorter than this (map units) is folded into the leg before it
+  var SHORT_LEG = 22;      // a jog shorter than this (map units) is folded into the leg before it
+  var STUB = 55;           // a first leg this short (a few steps from a door) absorbs a gentle bend
   var FEET_PER_MINUTE = 240; // an easy indoor walking pace, about 2.7 mph
 
   function angleBetween(h1, h2) {
@@ -273,19 +282,29 @@
       var cur = legs[legs.length - 1];
       // A short stub (like the few steps from a door to the hallway) absorbs a gentle bend too.
       var bend = cur ? Math.abs(angleBetween(cur.h, h)) : 0;
-      if (cur && (bend < TURN_MIN || (cur.len < 25 && bend < 60))) {
-        cur.len += len; cur.end = i; cur.h = h;
+      var outside = route.kinds && route.kinds[i] === 'outdoor';
+      // Going in or out of the building always starts a new step, even in a straight line.
+      if (cur && cur.outdoor === outside && (bend < TURN_MIN || (cur.len < STUB && bend < 60))) {
+        cur.len += len; cur.end = i; cur.h = h; cur.outdoor = cur.outdoor || outside;
       } else {
-        legs.push({ h: h, len: len, start: i - 1, end: i });
+        legs.push({ h: h, len: len, start: i - 1, end: i, outdoor: outside });
       }
     }
     // Fold tiny jogs into the previous leg so you never read "turn left, 3 ft".
     var kept = [];
     legs.forEach(function (leg, k) {
       var edge = k === 0 || k === legs.length - 1;
-      if (!edge && leg.len < SHORT_LEG && kept.length) { kept[kept.length - 1].len += leg.len; kept[kept.length - 1].end = leg.end; }
+      if (!edge && leg.len < SHORT_LEG && kept.length && kept[kept.length - 1].outdoor === leg.outdoor) {
+        var prevLeg = kept[kept.length - 1];
+        prevLeg.len += leg.len; prevLeg.end = leg.end; prevLeg.outdoor = prevLeg.outdoor || leg.outdoor;
+      }
       else { kept.push(leg); }
     });
+
+    // A first step of only a few feet (from the door to the hallway) is folded into the next one.
+    if (kept.length > 1 && kept[0].len < STUB / 2) {
+      kept[1].len += kept[0].len; kept[1].start = kept[0].start; kept.shift();
+    }
 
     var steps = [{ kind: 'start', turn: '', text: 'Start at ' + (nodes[0].name || 'the entrance'), feet: 0 }];
     var totalUnits = 0;
@@ -297,12 +316,15 @@
       var text;
       if (last) {
         text = tw.text + ' to ' + targetName;
+      } else if (leg.outdoor) {
+        text = (k === 0 ? 'Head' : tw.text) + ' outside along the walkway toward ' + (end.name || 'the next building');
       } else {
         text = tw.text + ' toward ' + (end.name || 'the end of the hall');
       }
       steps.push({
         kind: last ? 'arrive' : 'walk',
         turn: k === 0 ? 'straight' : tw.turn,
+        outdoor: !!leg.outdoor,
         text: text,
         feet: Math.max(5, Math.round(leg.len * fpu / 5) * 5)
       });
