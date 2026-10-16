@@ -15,7 +15,7 @@
   function files(school) {
     var c = school.campus || {};
     return {
-      campus: { data: c.data || null, base: c.base || null, extras: c.extras || null },
+      campus: { data: c.data || null, base: c.base || null, extras: c.extras || null, categories: c.categories || null },
       buildings: (school.buildings || []).map(function (id) { return 'buildings/' + id + '.json'; })
     };
   }
@@ -79,7 +79,7 @@
     return b;
   }
 
-  // school: school.json. campus: { data, base, extras } (parsed, any can be null). buildings: the building files, in order.
+  // school: school.json. campus: { data, base, extras, categories } (parsed, any can be null). buildings: the building files, in order.
   // Returns { school, campus, buildings, byId, problems }.
   function prepare(school, campus, buildings) {
     campus = campus || {};
@@ -102,8 +102,16 @@
       var b = osmToBuilding[f.properties.osm];
       if (b) { f.properties.indoor = b.id; f.properties.indoorName = b.name; found[f.properties.osm] = true; }
     });
+    // Campus buildings coloured by kind (academic, library, dining...): campus/categories.json lists building names per kind.
+    var cats = (campus.categories && campus.categories.buildings) || {}, catOf = {}, usedName = {};
+    Object.keys(cats).forEach(function (k) { (cats[k] || []).forEach(function (n) { catOf[String(n).trim().toLowerCase()] = k; }); });
+    ((data.buildings || {}).features || []).forEach(function (f) {
+      var n = String(f.properties.name || '').trim().toLowerCase();
+      if (n && catOf[n]) { f.properties.cat = catOf[n]; usedName[n] = true; }
+    });
+    Object.keys(catOf).forEach(function (n) { if (!usedName[n]) { problems.push('categories.json: "' + n + '" is not a building in the campus data'); } });
     Object.keys(osmToBuilding).forEach(function (id) { if (!found[id]) { problems.push(osmToBuilding[id].id + ': OpenStreetMap footprint ' + id + ' is not in the campus data'); } });
-    return { school: school, campus: { data: data, base: campus.base || null, extras: extras }, buildings: list, byId: byId, problems: problems };
+    return { school: school, campus: { data: data, base: campus.base || null, extras: extras, categories: campus.categories || null }, buildings: list, byId: byId, problems: problems };
   }
 
   return { files: files, prepare: prepare, prepareBuilding: prepareBuilding, lv: lv };

@@ -12,7 +12,8 @@
   "short": "O'Neill",
   "osm": ["way/29673820"],
   "height": 22,
-  "note": "Levels 1 to 5 traced from the 2019 O'Neill Library floor map (the 2013 map only for details it does not contradict).",
+  "defaultLevel": "3",
+ "note": "Levels 1 to 5 traced from the 2019 O'Neill Library floor map (the 2013 map only for details it does not contradict).",
   "style": {"piers": false},
   "levels": [
     {"id": "1", "name": "Level 1"},

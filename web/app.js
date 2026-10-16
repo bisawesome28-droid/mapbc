@@ -4,7 +4,7 @@
 // so a native app reuses everything in core/ and the data, and rewrites only this part.
 (function () {
   var ML = window.MapLogic, MI = window.MapIndoor, MS = window.MapSchool, STYLE = window.MapStyle;
-  var VERSION = '2026-10-16 u'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 v'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -88,8 +88,8 @@
       var dir = 'schools/' + (entry.folder || entry.id) + '/';
       return getJson(dir + 'school.json').then(function (school) {
         var f = MS.files(school), opt = function (p) { return p ? getJson(dir + p) : Promise.resolve(null); };
-        return Promise.all([opt(f.campus.data), opt(f.campus.base), opt(f.campus.extras), Promise.all(f.buildings.map(function (p) { return getJson(dir + p); }))])
-          .then(function (r) { return MS.prepare(school, { data: r[0], base: r[1], extras: r[2] }, r[3]); });
+        return Promise.all([opt(f.campus.data), opt(f.campus.base), opt(f.campus.extras), opt(f.campus.categories), Promise.all(f.buildings.map(function (p) { return getJson(dir + p); }))])
+          .then(function (r) { return MS.prepare(school, { data: r[0], base: r[1], extras: r[2], categories: r[3] }, r[4]); });
       });
     });
   }
@@ -113,7 +113,8 @@
     var route = null, routeB = null, dirs = null, outRoute = null, viaQuick = '', active = -1, shown = [];
     var you = null, locOn = false, watchId = null, smoother = null, locNote = null, centered = false;
     var levelOf = {}; // the floor showing in each building
-    BUILDINGS.forEach(function (b) { levelOf[b.id] = groundLevel(b); });
+    // The floor a building opens on: its "defaultLevel" if the file has one (O'Neill: the main floor), else its lowest mapped floor.
+    BUILDINGS.forEach(function (b) { levelOf[b.id] = b.defaultLevel && levelById(b, String(b.defaultLevel)) ? String(b.defaultLevel) : groundLevel(b); });
     var openB = null; // the building whose inside is showing (zoomed in on it)
     var hoverKey = '';
     var SIM = readUrl().sim === '1'; // ?sim=1: tap the map to place a pretend location (no GPS needed)
@@ -245,6 +246,7 @@
         if (openB) { showLevel(levelOf[openB.id], true); }
         refreshIndoor(); drawRoute(); drawNetwork(); renderFloors(); renderBanner();
         $('legend').style.display = openB ? '' : 'none'; // room colours only mean something looking inside
+        $('catkey').style.display = openB ? 'none' : ''; // building colours only mean something looking at the campus
       }
       renderHeader();
     }
@@ -404,7 +406,7 @@
         map.getCanvas().style.cursor = 'pointer';
       });
       map.on('mouseleave', 'in-room', function () { hoverKey = ''; refreshIndoor(); map.getCanvas().style.cursor = ''; });
-      ['in-entr', 'in-spot', 'indoor-3d', 'buildings'].forEach(function (id) {
+      ['in-entr', 'in-spot', 'buildings'].forEach(function (id) {
         if (!map.getLayer(id)) { return; }
         map.on('mouseenter', id, function () { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', id, function () { map.getCanvas().style.cursor = ''; });
@@ -439,14 +441,16 @@
       var c = palette(), st = document.documentElement.style;
       Object.keys(c.rooms).forEach(function (t) { st.setProperty('--c-' + t, c.rooms[t]); });
       st.setProperty('--accent', c.accent);
+      c.cats.forEach(function (k) { st.setProperty('--cat-' + k.id, k.color); });
+      st.setProperty('--cat-other', c.buildingTop);
     }
 
     // The building you picked turns blue (in 3D).
     function highlightBuilding() {
       if (!map || !map.getLayer('buildings-3d')) { return; }
       var c = palette(), id = sel && sel.kind === 'building' ? sel.o.properties.osm : '';
-      map.setPaintProperty('buildings-3d', 'fill-extrusion-color', ['case', ['==', ['get', 'osm'], id], c.selected, c.building]);
-      map.setPaintProperty('buildings-roof', 'fill-extrusion-color', ['case', ['==', ['get', 'osm'], id], c.selectedTop, c.buildingTop]);
+      map.setPaintProperty('buildings-3d', 'fill-extrusion-color', ['case', ['==', ['get', 'osm'], id], c.selected, c.buildingSide]);
+      map.setPaintProperty('buildings-roof', 'fill-extrusion-color', ['case', ['==', ['get', 'osm'], id], c.selectedTop, c.buildingRoof]);
     }
 
     // Everything about the floor plans that changes as you use the map: which building and floor show, the selected
@@ -475,9 +479,9 @@
       });
       // The open building's own 3D block and name step aside so its floor plan shows.
       var openId = openB ? openB.id : '';
-      ['indoor-3d', 'indoor-names'].forEach(function (id) {
+      ['buildings-3d', 'buildings-roof', 'indoor-edge', 'indoor-names'].forEach(function (id) {
         if (!map.getLayer(id)) { return; }
-        var f = id === 'indoor-3d' ? ['all', ['has', 'indoor'], ['!=', ['get', 'indoor'], openId]] : ['!=', ['get', 'b'], openId];
+        var f = id === 'indoor-names' ? ['!=', ['get', 'b'], openId] : (id === 'indoor-edge' ? ['all', ['has', 'indoor'], ['!=', ['get', 'indoor'], openId]] : ['!=', ['get', 'indoor'], openId]);
         var s = JSON.stringify(f);
         if (lastState['f:' + id] !== s) { lastState['f:' + id] = s; map.setFilter(id, f); }
       });
@@ -615,7 +619,7 @@
         if (p.k === 'room') { var r = find(b.rooms, p.rid); if (r) { choose({ kind: 'room', o: r }); return; } }
       }
       // Not on a floor plan: did the tap land on a campus building? (The 3D layers first, so a tilted roof counts.)
-      var layers = ['indoor-3d', 'buildings-3d', 'buildings-roof', 'buildings'].filter(function (id) { return map.getLayer(id); });
+      var layers = ['buildings-3d', 'buildings-roof', 'buildings'].filter(function (id) { return map.getLayer(id); });
       var bh = layers.length ? map.queryRenderedFeatures(e.point, { layers: layers }) : [];
       for (var j = 0; j < bh.length; j++) {
         if (bh[j].properties.indoor && BY[bh[j].properties.indoor]) { if (openB !== BY[bh[j].properties.indoor]) { showAll(BY[bh[j].properties.indoor]); } return; }
@@ -1492,6 +1496,10 @@
         b.addEventListener('click', function () { quick(q[1], q[0]); });
         $('quick').appendChild(b);
       });
+      var ck = $('catkey');
+      STYLE.categories.forEach(function (k) { ck.appendChild(h('div', { 'class': 'k' }, [h('span', { 'class': 'sw', style: 'background:var(--cat-' + k.id + ')' }), k.name])); });
+      ck.appendChild(h('div', { 'class': 'k' }, [h('span', { 'class': 'sw', style: 'background:var(--cat-other)' }), 'Other']));
+      if (BUILDINGS.length) { ck.appendChild(h('div', { 'class': 'k' }, [h('span', { 'class': 'sw edge' }), 'Has an indoor map'])); }
       var lg = $('legend');
       LEGEND.forEach(function (t) {
         var b = h('button', { type: 'button', 'aria-pressed': 'true' }, [swatch(t), TYPES[t]]);
