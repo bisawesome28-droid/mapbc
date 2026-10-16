@@ -1,19 +1,20 @@
 // Turns an OpenStreetMap export into the three files the campus map reads.
 //
 //   1. In Overpass Turbo (see campus/README.md) run the query and choose Export > GeoJSON > download.
-//   2. Save that file as campus/osm_export.geojson
-//   3. node tools/osm_to_campus.js campus/osm_export.geojson
+//   2. Save that file as schools/bc/campus/osm_export.geojson (bc = the school's folder)
+//   3. node tools/osm_to_campus.js schools/bc/campus/osm_export.geojson bc
 //
 // It writes two files and prints a short report of what it found (and what is missing, like buildings with no name):
-//   campus/data.js  window.CAMPUS_DATA: buildings, walking paths and entrances (search and directions use these)
-//   campus/base.js  window.CAMPUS_BASE: what the map draws around them (grass, roads, parking, water, trees,
-//                   nearby houses, and how tall each building is), styled by campus/style.js
-// Running it again overwrites campus/data.js, so make hand edits only after you are happy with the import.
+//   schools/bc/campus/data.json  buildings, walking paths and entrances (search and directions use these)
+//   schools/bc/campus/base.json  what the map draws around them (grass, roads, parking, water, trees,
+//                                nearby houses, and how tall each building is), styled by core/style.js
+// Running it again overwrites both, so put hand edits in campus/extras.json instead.
 //
 // The conversion is in a function so tests.js can check it: require('./tools/osm_to_campus.js').convert(...)
 
 var fs = require('fs');
 var path = require('path');
+var fmt = require('./json_format.js');
 
 // Kinds of "highway" that people walk on. Roads for cars only are left out.
 var WALKABLE = {
@@ -192,45 +193,38 @@ function convert(fc) {
   };
 }
 
-// The page reads window.CAMPUS_DATA from a script file (scripts load from disk; fetch() does not).
-// One feature per line keeps the file readable and git diffs small.
-function toDataJs(out) {
-  function fc(c) {
-    if (!c.features.length) { return '{"type": "FeatureCollection", "features": []}'; }
-    return '{"type": "FeatureCollection", "features": [\n' + c.features.map(function (f) { return '    ' + JSON.stringify(f); }).join(',\n') + '\n  ]}';
-  }
-  return '// Campus data for the outdoor map: buildings, walking paths and building entrances, in GeoJSON.\n' +
-    '// Coordinates are [longitude, latitude] (longitude FIRST, the opposite of Google Maps).\n' +
-    '// Written by tools/osm_to_campus.js from an OpenStreetMap export (see campus/README.md).\n' +
-    '// Data (c) OpenStreetMap contributors, ODbL. Keep the credit on the map.\n' +
-    'window.CAMPUS_DATA = {\n  "campus": ' + fc(out.campus || { features: [] }) + ',\n  "buildings": ' + fc(out.buildings) + ',\n  "paths": ' + fc(out.paths) + ',\n  "entrances": ' + fc(out.entrances) + '\n};\n';
+// The campus data, as the object that is saved to schools/<id>/campus/data.json (one feature per line, see json_format.js).
+function toDataJson(out) {
+  return {
+    about: ['Campus data for search and directions: buildings, walking paths and building entrances (GeoJSON).',
+      'Coordinates are [longitude, latitude]. Written by tools/osm_to_campus.js. Data (c) OpenStreetMap contributors, ODbL.'],
+    campus: out.campus || { type: 'FeatureCollection', features: [] }, buildings: out.buildings, paths: out.paths, entrances: out.entrances
+  };
 }
 
-function toBaseJs(base) {
-  function fc(c) {
-    if (!c.features.length) { return '{"type": "FeatureCollection", "features": []}'; }
-    return '{"type": "FeatureCollection", "features": [\n' + c.features.map(function (f) { return '    ' + JSON.stringify(f); }).join(',\n') + '\n  ]}';
-  }
-  return '// What the campus map draws around the buildings: grass, roads, parking, water, trees, nearby houses,\n' +
-    '// and how tall each campus building is ("heights", by OpenStreetMap id, in metres; guess: 1 = not in OSM yet).\n' +
-    '// Written by tools/osm_to_campus.js from an OpenStreetMap export. Colours and layers are in campus/style.js.\n' +
-    '// Data (c) OpenStreetMap contributors, ODbL. Keep the credit on the map.\n' +
-    'window.CAMPUS_BASE = {\n  "bounds": ' + JSON.stringify(base.bounds) + ',\n  "heights": ' + JSON.stringify(base.heights) +
-    ',\n  "areas": ' + fc(base.areas) + ',\n  "lines": ' + fc(base.lines) + ',\n  "houses": ' + fc(base.houses) + ',\n  "trees": ' + JSON.stringify(base.trees) + '\n};\n';
+// What the map draws around the buildings, saved to schools/<id>/campus/base.json.
+function toBaseJson(base) {
+  return {
+    about: ['What the campus map draws around the buildings: grass, roads, parking, water, trees, nearby houses, and how tall',
+      'each campus building is ("heights" by OpenStreetMap id, in metres; guess: 1 = not in OSM). Written by tools/osm_to_campus.js.',
+      'Colours and layers are in core/style.js. Data (c) OpenStreetMap contributors, ODbL.'],
+    bounds: base.bounds, heights: base.heights, areas: base.areas, lines: base.lines, houses: base.houses, trees: base.trees
+  };
 }
 
-function main(file) {
-  if (!file) { console.error('Usage: node tools/osm_to_campus.js campus/osm_export.geojson'); process.exit(1); }
+function main(file, school) {
+  if (!file) { console.error('Usage: node tools/osm_to_campus.js schools/bc/campus/osm_export.geojson [school id, default bc]'); process.exit(1); }
   var input;
   try { input = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (e) { console.error('Could not read ' + file + ': ' + e.message); process.exit(1); }
   if (!input.features) { console.error(file + ' is not GeoJSON. In Overpass Turbo use Export > GeoJSON, not the raw data.'); process.exit(1); }
-  var out = convert(input), dir = path.join(__dirname, '..', 'campus');
-  fs.writeFileSync(path.join(dir, 'data.js'), toDataJs(out));
+  var out = convert(input), dir = path.join(__dirname, '..', 'schools', school || 'bc', 'campus');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'data.json'), fmt.format(toDataJson(out)));
   var ids = {};
   out.buildings.features.forEach(function (b) { ids[b.properties.osm] = 1; });
   var base = convertBase(input, ids);
-  fs.writeFileSync(path.join(dir, 'base.js'), toBaseJs(base));
+  fs.writeFileSync(path.join(dir, 'base.json'), fmt.format(toBaseJson(base)));
   var r = out.report;
   console.log('Buildings: ' + r.buildings + ' (' + r.namedBuildings + ' with a name, ' + (r.buildings - r.namedBuildings) + ' without)');
   console.log('Walking paths: ' + r.paths);
@@ -238,11 +232,11 @@ function main(file) {
   if (r.campusAreas) { console.log('Campus boundary: ' + r.campusAreas + ' area(s). Left out ' + r.outsideCampus + ' unnamed buildings outside it (houses nearby).'); }
   console.log('Left out of directions: ' + r.skipped + ' other items (roads, trees, and so on)');
   var q = base.report;
-  console.log('Drawn around them (campus/base.js): ' + q.areas + ' areas, ' + q.lines + ' roads and paths, ' + q.trees + ' trees, ' + q.houses + ' nearby houses');
+  console.log('Drawn around them (campus/base.json): ' + q.areas + ' areas, ' + q.lines + ' roads and paths, ' + q.trees + ' trees, ' + q.houses + ' nearby houses');
   console.log('Building heights guessed (no "height" or "building:levels" in OpenStreetMap): ' + q.guessedHeights);
   var unnamed = out.buildings.features.filter(function (b) { return !b.properties.name; }).length;
-  if (unnamed) { console.log('\nBuildings with no name will not show a label or turn up in search. Name them in OpenStreetMap or in campus/data.js.'); }
+  if (unnamed) { console.log('\nBuildings with no name will not show a label or turn up in search. Name them in OpenStreetMap (or in campus/data.json, but the next import overwrites it).'); }
 }
 
-if (require.main === module) { main(process.argv[2]); }
-module.exports = { convert: convert, toDataJs: toDataJs, convertBase: convertBase, toBaseJs: toBaseJs, heightOf: heightOf, areaClass: areaClass };
+if (require.main === module) { main(process.argv[2], process.argv[3]); }
+module.exports = { convert: convert, toDataJson: toDataJson, convertBase: convertBase, toBaseJson: toBaseJson, heightOf: heightOf, areaClass: areaClass };

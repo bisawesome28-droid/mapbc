@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Places a traced floor plan on the real map by fitting its outline onto OpenStreetMap's building footprints.
 
-This is how Stokes Hall got its GPS corners (window.GEO in data.js). It:
+This is how Stokes Hall got its GPS corners ("geo" in schools/bc/buildings/stokes.json). It:
   1. downloads a small block of OpenStreetMap map tiles around the building (zoom 19, about 0.2 m per pixel),
   2. finds the building shapes in them (OSM draws buildings in one flat colour),
-  3. slides, turns and resizes the traced outline (OUTLINES in data.js) until it overlaps those shapes best,
+  3. slides, turns and resizes the traced outline ("outlines" in the building's JSON file) until it overlaps those shapes best,
   4. prints 4 GEO control points and the scale, and saves an overlay picture so you can check the fit by eye.
 
 Needs Python 3 with numpy, scipy and Pillow (pip install numpy scipy pillow), node, and internet access to
@@ -38,7 +38,7 @@ def main():
     ap.add_argument('--center', required=True, help='lat,lng roughly in the middle of the building')
     ap.add_argument('--seed', action='append', required=True, help='lat,lng inside each part of the building (repeat)')
     ap.add_argument('--level', default='1', help='which floor outlines to use (default 1)')
-    ap.add_argument('--data', default=os.path.join(os.path.dirname(__file__), '..', 'data.js'))
+    ap.add_argument('--data', default=os.path.join(os.path.dirname(__file__), '..', 'schools', 'bc', 'buildings', 'stokes.json'), help='the building file')
     ap.add_argument('--out', default='plan_fit.png', help='overlay picture to check the fit')
     a = ap.parse_args()
 
@@ -83,9 +83,9 @@ def main():
     target = ndimage.binary_fill_holes(np.isin(lab, list(keep)))
 
     # 3. the traced outline, and the best move + turn + resize
-    js = "global.window={};require(%s);console.log(JSON.stringify(window.OUTLINES.filter(o=>String(o.level||'1')===%s && o.wing!=='Bridge')))" % (
-        json.dumps(os.path.abspath(a.data)), json.dumps(a.level))
-    outlines = [o['points'] for o in json.loads(subprocess.run(['node', '-e', js], capture_output=True, text=True, check=True).stdout)]
+    with open(a.data) as f:
+        bdata = json.load(f)
+    outlines = [o['points'] for o in bdata.get('outlines', []) if str(o.get('level', '1')) == a.level and o.get('wing') != 'Bridge']
     allpts = [p for o in outlines for p in o]
     pcx = sum(p[0] for p in allpts) / len(allpts); pcy = sum(p[1] for p in allpts) / len(allpts)
 
@@ -132,7 +132,7 @@ def main():
 
     print('Overlap with the OpenStreetMap footprint: %d%%  (above about 85%% is good)' % round(overlap * 100))
     print('Scale: %.4f m per plan unit = %.4f ft per plan unit' % (m_per_unit, m_per_unit / 0.3048))
-    print('GEO points for data.js:')
+    print('"geo" points for the building file:')
     for q in points:
         print('  ' + json.dumps(q) + ',')
 

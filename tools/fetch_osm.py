@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Downloads campus map data from OpenStreetMap and saves it as campus/osm_export.geojson.
+"""Downloads campus map data from OpenStreetMap and saves it as schools/bc/campus/osm_export.geojson.
 
 It asks OpenStreetMap's main server (api.openstreetmap.org) for a box of the map, in small squares
 (the server refuses big ones), keeps buildings, roads and paths, entrances, the campus boundary, and what the map draws
 around them (grass, parking, sports fields, water, trees, railways), and writes GeoJSON in the
-same shape as an Overpass Turbo export. Then turn it into campus/data.js with:
+same shape as an Overpass Turbo export. Then turn it into schools/bc/campus/data.json with:
 
   python3 tools/fetch_osm.py                      # the default box is Boston College's Chestnut Hill campus
-  node tools/osm_to_campus.js campus/osm_export.geojson
+  node tools/osm_to_campus.js schools/bc/campus/osm_export.geojson
 
 Another campus: python3 tools/fetch_osm.py --bbox south,west,north,east   (latitudes and longitudes)
 Only needs Python 3 (no extra packages). Please run it rarely: the server is shared by everyone.
@@ -51,7 +51,7 @@ def fetch(s, w, n, e):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--bbox', help='south,west,north,east (default: Boston College Chestnut Hill)')
-    ap.add_argument('--out', default=os.path.join(os.path.dirname(__file__), '..', 'campus', 'osm_export.geojson'))
+    ap.add_argument('--out', default=os.path.join(os.path.dirname(__file__), '..', 'schools', 'bc', 'campus', 'osm_export.geojson'))
     a = ap.parse_args()
     s0, w0, n0, e0 = map(float, a.bbox.split(',')) if a.bbox else BC
 

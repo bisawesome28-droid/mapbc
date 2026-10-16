@@ -1,12 +1,24 @@
 // Simple tests for search and routing. Run them with:  node tests.js
 // Each test prints PASS or FAIL. The last line says how many passed.
 var assert = require('assert');
-var ML = require('./logic.js');
+var fs = require('fs');
+var ML = require('./core/logic.js');
+var MS = require('./core/school.js');
+var MI = require('./core/indoor.js');
+var MSTYLE = require('./core/style.js');
 
-// data.js writes to window.*, so give it a pretend window.
-global.window = {};
-require('./data.js');
-var D = global.window;
+// Every school's data, read from its JSON files and readied the same way the page does it (core/school.js).
+function readJson(f) { return JSON.parse(fs.readFileSync(f, 'utf8')); }
+function loadSchool(id) {
+  var dir = 'schools/' + id + '/', school = readJson(dir + 'school.json'), f = MS.files(school);
+  var opt = function (p) { return p ? readJson(dir + p) : null; };
+  return MS.prepare(school, { data: opt(f.campus.data), base: null, extras: opt(f.campus.extras) }, f.buildings.map(function (p) { return readJson(dir + p); }));
+}
+var SCHOOLS = readJson('schools/index.json').schools.map(function (s) { return loadSchool(s.folder || s.id); });
+var BC = SCHOOLS[0];
+// Stokes Hall, under the names the older tests use.
+var S = BC.byId.stokes;
+var D = { ROOMS: S.rooms, PATHS: S.paths, ENTRANCES: S.entrances, SPOTS: S.spots, OUTLINES: S.outlines, GEO: S.geo, SCALE: S.scale, LEVELS: S.levels };
 
 var passed = 0, failed = 0;
 function test(name, fn) {
@@ -498,7 +510,8 @@ test('campus look: areas, roads, trees and nearby houses are sorted out for draw
   assert.strictEqual(base.areas.features[0].properties.name, 'Test Quad');
   assert.deepStrictEqual(base.lines.features.map(function (f) { return f.properties; }), [{ 'class': 'major', name: 'Beacon Street' }, { 'class': 'path' }, { 'class': 'rail' }], 'path names are left off (the map does not label them)');
   assert.deepStrictEqual(base.trees.features[0].geometry.coordinates, [[-71.171235, 42.3351]], 'trees, rounded to 6 places');
-  assert.ok(/^window\.CAMPUS_BASE = /m.test(OSM.toBaseJs(base).split('\n').slice(4).join('\n')), 'base.js sets window.CAMPUS_BASE');
+  var fmt = require('./tools/json_format.js');
+  assert.deepStrictEqual(JSON.parse(fmt.format(OSM.toBaseJson(base))).trees, base.trees, 'base.json reads back');
 });
 
 test('campus import: rounds coordinates and keeps longitude first', function () {
@@ -511,28 +524,26 @@ test('campus import: empty or odd input does not crash', function () {
   assert.strictEqual(OSM.convert({ features: [{ properties: {}, geometry: null }] }).report.skipped, 1);
 });
 
-test('campus config: centre is [longitude, latitude] and inside Massachusetts', function () {
-  require('./campus/config.js');
-  var C = global.window.CAMPUS;
+test('school file: centre is [longitude, latitude] and inside Massachusetts', function () {
+  var C = BC.school;
   assert.ok(C && C.center && C.center.length === 2, 'CAMPUS.center needs [lng, lat]');
   assert.ok(C.center[0] < -69 && C.center[0] > -74, 'first number should be the longitude (about -71), got ' + C.center[0]);
   assert.ok(C.center[1] > 41 && C.center[1] < 43, 'second number should be the latitude (about 42), got ' + C.center[1]);
 });
 
-test('campus data: campus/data.js loads and holds valid GeoJSON', function () {
-  require('./campus/data.js');
-  var C = global.window.CAMPUS_DATA;
+test('campus data: campus/data.json holds valid GeoJSON', function () {
+  var C = BC.campus.data;
   ['buildings', 'paths', 'entrances'].forEach(function (n) {
     assert.strictEqual(C[n].type, 'FeatureCollection', n);
     C[n].features.forEach(function (f) { assert.ok(f.geometry && f.geometry.coordinates, n + ' has a feature with no shape'); });
   });
 });
 
-test('campus import: writes a data.js that loads back to the same data', function () {
-  var out = OSM.convert(sampleExport), w = {};
-  new Function('window', OSM.toDataJs(out))(w);
-  assert.deepStrictEqual(w.CAMPUS_DATA.buildings, out.buildings);
-  assert.deepStrictEqual(w.CAMPUS_DATA.paths, out.paths);
+test('campus import: writes a data.json that reads back to the same data', function () {
+  var out = OSM.convert(sampleExport), fmt = require('./tools/json_format.js');
+  var back = JSON.parse(fmt.format(OSM.toDataJson(out)));
+  assert.deepStrictEqual(back.buildings, out.buildings);
+  assert.deepStrictEqual(back.paths, out.paths);
 });
 
 // ---------- GPS blue dot ----------
@@ -753,8 +764,7 @@ test('real data: from just west of Stokes, the straight-line fallback picks the 
 });
 
 test('real campus data: from O\'Neill Library to S03 follows real walkways and is quick to work out', function () {
-  require('./campus/data.js');
-  var CD = global.window.CAMPUS_DATA;
+  var CD = BC.campus.data;
   if (!CD.paths.features.length) { return; } // not imported yet
   var geo = ML.fitGeo(D.GEO.points), mpu = 1 / geo.unitsPerMeter;
   var oneill = CD.buildings.features.filter(function (f) { return /O.Neill Library/.test(f.properties.name); })[0];
