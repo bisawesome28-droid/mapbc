@@ -422,7 +422,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 d'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 e'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -926,7 +926,9 @@ dd.none{color:var(--muted)}
     }
     if (route) { route.points.forEach(function (p, i) { if (route.levels[i] === curLevel) { grow(p[0], p[1], p[0], p[1]); } }); }
     if (outRoute) { outRoute.lnglat.forEach(function (ll) { var p = toPlan(ll[0], ll[1]); grow(p.x, p.y, p.x, p.y); }); }
-    else if (!route && from && entranceById(from) && lv(entranceById(from)) === curLevel) {
+    else if (!route && fromBuilding() && !sel) {
+      bldgRings(fromBuilding()).forEach(function (r) { r.forEach(function (c) { var q = toPlan(c[0], c[1]); grow(q.x, q.y, q.x, q.y); }); });
+    } else if (!route && from && entranceById(from) && lv(entranceById(from)) === curLevel) {
       var en = entranceById(from); grow(en.x - 150, en.y - 150, en.x + 150, en.y + 150);
     }
     if (!b) { return; }
@@ -1151,14 +1153,41 @@ dd.none{color:var(--muted)}
   }
   function groundEntrances() { return ENTRANCES.filter(function (en) { return lv(en) === LEVELS[0].id; }); }
 
-  // Plans the whole trip from your location to a target: along the walkways to the best door, then inside.
-  // Returns null if it cannot (no location yet, or no door leads there).
-  function planFromYou(target) {
-    if (!you) { return null; }
-    var net = outdoorNet(), doors = groundEntrances(), here = toLngLat(you.x, you.y);
-    var start = outFrame.toXY(here[1], here[0]);
+  // "Starting from" can be your location, a Stokes door, or a campus building (value "B:" + its OpenStreetMap id).
+  function isBuildingFrom(id) { return typeof id === 'string' && id.indexOf('B:') === 0; }
+  function fromBuilding() { return isBuildingFrom(from) ? buildingByOsm(from.slice(2)) : null; }
+  function startLabel() { var b = fromBuilding(); return b ? b.properties.name : 'your location'; }
+  // The point on a building's outline that is closest to somewhere else ([lng, lat]), so a walk starts at
+  // the side of the building that faces where you are going, not in the middle of it.
+  function edgePointToward(f, towardLL) {
+    outdoorNet();
+    var t = outFrame.toXY(towardLL[1], towardLL[0]), best = null, bd = Infinity;
+    bldgRings(f).forEach(function (r) {
+      r.forEach(function (c) {
+        var q = outFrame.toXY(c[1], c[0]), d = Math.hypot(q.x - t.x, q.y - t.y);
+        if (d < bd) { bd = d; best = c; }
+      });
+    });
+    return best;
+  }
+  // Where an outdoor walk starts, for your location or a campus building. toward = [lng, lat] of where you are heading.
+  function outdoorStart(toward) {
+    if (from === 'ME') { return you ? { ll: toLngLat(you.x, you.y), name: 'Your location', label: 'your location' } : null; }
+    var b = fromBuilding();
+    return b ? { ll: edgePointToward(b, toward), name: b.properties.name, label: b.properties.name } : null;
+  }
+  var STOKES_LL = null;
+  function stokesCenter() { return STOKES_LL || (STOKES_LL = toLngLat(FULL.x + FULL.w / 2, FULL.y + FULL.h / 2)); }
+
+  // Plans the whole trip from your location (or a campus building) to a room in Stokes: along the walkways to
+  // the best door, then inside. Returns null if it cannot (no start yet, or no door leads there).
+  function planFromOutside(target) {
+    var st0 = outdoorStart(stokesCenter());
+    if (!st0) { return null; }
+    var net = outdoorNet(), doors = groundEntrances();
+    var start = outFrame.toXY(st0.ll[1], st0.ll[0]);
     var places = { start: start, entrances: {} };
-    var pts = [{ id: 'START', name: 'Your location', x: start.x, y: start.y }];
+    var pts = [{ id: 'START', name: st0.name, x: start.x, y: start.y }];
     doors.forEach(function (en) {
       var ll = toLngLat(en.x, en.y), p = outFrame.toXY(ll[1], ll[0]);
       places.entrances[en.id] = p;
@@ -1171,10 +1200,10 @@ dd.none{color:var(--muted)}
   }
 
   var lastRouteFix = null;
-  function routeFromYou() {
-    if (!you || !sel) { return; }
+  function routeFromOutside() {
+    if (!sel || !(from === 'ME' ? you : fromBuilding())) { return; }
     // Inside the building GPS is too rough to steer by, so start from the nearest door instead.
-    if (you.inside && you.nearest) {
+    if (from === 'ME' && you.inside && you.nearest) {
       route = ML.routeTo(graph, you.nearest.id, sel, { accessible: accessible });
       if (route) {
         dirs = ML.describe(graph, route, titleOf(sel), { feetPerUnit: SCALE.feetPerUnit, levelNames: LEVEL_NAMES });
@@ -1182,18 +1211,18 @@ dd.none{color:var(--muted)}
       }
       return;
     }
-    var best = planFromYou(sel);
+    var best = planFromOutside(sel);
     if (!best) { return; }
     route = best.indoor;
     dirs = ML.describe(graph, route, titleOf(sel), { feetPerUnit: SCALE.feetPerUnit, levelNames: LEVEL_NAMES });
     var en = entranceById(best.entrance);
     outRoute = {
-      straight: best.straight, entrance: best.entrance,
+      straight: best.straight, entrance: best.entrance, startLabel: startLabel(),
       feet: Math.round(best.outdoor.length * 3.28084 / 5) * 5,
       lnglat: best.outdoor.points.map(function (p) { var g = outFrame.toLatLng(p[0], p[1]); return [g.lng, g.lat]; }),
       steps: best.straight ? null : ML.describe(best.out, best.outdoor, en.name, { feetPerUnit: 3.28084, fallbackName: 'the path' }).steps
     };
-    lastRouteFix = { x: you.x, y: you.y };
+    if (from === 'ME') { lastRouteFix = { x: you.x, y: you.y }; }
   }
 
   // ---------- Campus buildings: search them and walk to them ----------
@@ -1234,9 +1263,9 @@ dd.none{color:var(--muted)}
     return inside ? 0 : best;
   }
 
-  // Where an outdoor walk starts: your location, or the chosen Stokes door.
-  function startPoint() {
-    if (from === 'ME') { return you ? toLngLat(you.x, you.y) : null; }
+  // Where an outdoor walk starts: your location, a campus building, or the chosen Stokes door.
+  function startPoint(toward) {
+    if (from === 'ME' || isBuildingFrom(from)) { var st = outdoorStart(toward); return st ? st.ll : null; }
     var en = entranceById(from);
     return en && lv(en) === LEVELS[0].id ? toLngLat(en.x, en.y) : null;
   }
@@ -1244,7 +1273,8 @@ dd.none{color:var(--muted)}
   // Walking directions to a campus building: along the walkways to its nearest mapped entrance,
   // or to the middle of the building when OpenStreetMap has no entrances for it.
   function routeToBuilding(f) {
-    var s = startPoint();
+    if (fromBuilding() === f) { return; } // already there
+    var s = startPoint(bldgCenter(f));
     if (!s) { return; }
     var net = outdoorNet(), st = outFrame.toXY(s[1], s[0]), rings = bldgRings(f), doors = [];
     ((CDATA.entrances || {}).features || []).forEach(function (e, i) {
@@ -1252,7 +1282,7 @@ dd.none{color:var(--muted)}
       if (rings.some(function (r) { return metersToRing(c, r) < 8; })) { doors.push({ id: 'B' + i, ll: c }); }
     });
     if (!doors.length) { doors.push({ id: 'B', ll: bldgCenter(f) }); }
-    var startName = from === 'ME' ? 'Your location' : entranceById(from).name;
+    var startName = from === 'ME' ? 'Your location' : (fromBuilding() ? fromBuilding().properties.name : entranceById(from).name);
     var pts = [{ id: 'START', name: startName, x: st.x, y: st.y }].concat(doors.map(function (d) {
       var p = outFrame.toXY(d.ll[1], d.ll[0]);
       return { id: d.id, name: f.properties.name, x: p.x, y: p.y };
@@ -1262,7 +1292,7 @@ dd.none{color:var(--muted)}
     var straight = !r;
     if (straight) { var p1 = pts[1]; r = { points: [[st.x, st.y], [p1.x, p1.y]], length: Math.hypot(st.x - p1.x, st.y - p1.y), ids: [], kinds: [] }; }
     outRoute = {
-      straight: straight, toBuilding: true,
+      straight: straight, toBuilding: true, startLabel: from === 'ME' ? 'your location' : startName,
       feet: Math.round(r.length * 3.28084 / 5) * 5,
       lnglat: r.points.map(function (p) { var g = outFrame.toLatLng(p[0], p[1]); return [g.lng, g.lat]; }),
       steps: straight ? null : ML.describe(out, r, f.properties.name, { feetPerUnit: 3.28084, fallbackName: 'the path' }).steps
@@ -1273,7 +1303,7 @@ dd.none{color:var(--muted)}
     var name = sel.o.properties.name;
     if (!from) {
       box.appendChild(h('h2', { text: 'Walk to ' + name }));
-      box.appendChild(h('p', { 'class': 'fine', text: 'Choose where you start (My location, or a Stokes door) to get walking directions.' }));
+      box.appendChild(h('p', { 'class': 'fine', text: 'Choose where you start (My location, a campus building, or a Stokes door) to get walking directions.' }));
       return;
     }
     if (from === 'ME' && !you) {
@@ -1283,7 +1313,7 @@ dd.none{color:var(--muted)}
     }
     if (!outRoute) {
       box.appendChild(h('h2', { text: 'No route found' }));
-      box.appendChild(h('div', { 'class': 'callout', text: 'Start from My location or a ground-floor Stokes door to walk to another building.' }));
+      box.appendChild(h('div', { 'class': 'callout', text: fromBuilding() === sel.o ? 'You are already there. Pick a different starting point.' : 'Start from My location, a campus building or a ground-floor Stokes door to walk to another building.' }));
       return;
     }
     var mins = Math.max(1, Math.round(outRoute.feet / 240));
@@ -1300,12 +1330,12 @@ dd.none{color:var(--muted)}
       ol.appendChild(h('li', { 'class': 'step ' + kind }, [icon(ic), h('span', { 'class': 'txt', text: text }), h('span', { 'class': 'ft', text: feet ? feet + ' ft' : '' })]));
     }
     if (outRoute.straight) {
-      addStep('start', 'start', 'Start at ' + (from === 'ME' ? 'your location' : entranceById(from).name), 0);
+      addStep('start', 'start', 'Start at ' + outRoute.startLabel, 0);
       addStep('arrive', 'arrive', 'Walk to ' + name + ' (straight-line distance)', outRoute.feet);
     } else {
       outRoute.steps.forEach(function (s) {
         var ic = s.kind === 'start' ? 'start' : (s.kind === 'arrive' ? 'arrive' : (s.turn || 'straight'));
-        addStep(s.kind, ic, s.kind === 'start' && from === 'ME' ? 'Start at your location' : s.text, s.feet);
+        addStep(s.kind, ic, s.kind === 'start' ? 'Start at ' + outRoute.startLabel : s.text, s.feet);
       });
     }
     box.appendChild(ol);
@@ -1471,7 +1501,7 @@ dd.none{color:var(--muted)}
     var box = $('routecard');
     box.textContent = '';
     if (sel && sel.kind === 'building') { renderBuildingCard(box); return; }
-    if (from === 'ME') { renderYouCard(box); return; }
+    if (from === 'ME' || fromBuilding()) { renderYouCard(box); return; }
     var en = entranceById(from);
     if (!en && !sel) {
       box.appendChild(h('div', { 'class': 'empty' }, [
@@ -1546,14 +1576,15 @@ dd.none{color:var(--muted)}
     box.appendChild(h('p', { 'class': 'fine', text: notes.join(' ') }));
   }
 
-  // The route card when starting from your location: outdoors to the door, then the indoor steps.
+  // The route card when starting outdoors (your location or a campus building): to the door, then the indoor steps.
   function renderYouCard(box) {
+    var label = startLabel(), mine = from === 'ME';
     if (!sel) {
-      box.appendChild(h('h2', { text: 'Starting from your location' }));
+      box.appendChild(h('h2', { text: 'Starting from ' + label }));
       box.appendChild(h('p', { 'class': 'fine', text: 'Now search for a room above, or tap one on the map.' }));
       return;
     }
-    if (!you) {
+    if (mine && !you) {
       box.appendChild(h('h2', { text: 'Finding your location' }));
       box.appendChild(h('p', { 'class': 'fine', text: SIM ? 'Test mode: tap the map to place a pretend location.' : 'Allow location when the browser asks. It is quicker outside.' }));
       return;
@@ -1569,7 +1600,7 @@ dd.none{color:var(--muted)}
       h('div', { 'class': 'big' }, [String(mins), h('small', { text: 'min walk' })]),
       h('div', { 'class': 'dist', text: '≈ ' + (total >= 1000 ? (total / 5280).toFixed(1) + ' mi' : total + ' ft') })
     ]));
-    var badges = h('div', { 'class': 'badges' }, [h('span', { 'class': 'badge info', text: 'From your location' })]);
+    var badges = h('div', { 'class': 'badges' }, [h('span', { 'class': 'badge info', text: 'From ' + label })]);
     if (viaQuick) { badges.appendChild(h('span', { 'class': 'badge info', text: 'Nearest ' + viaQuick })); }
     if (accessible) { badges.appendChild(h('span', { 'class': 'badge ok', text: 'Step-free' })); }
     if (outRoute && outRoute.straight) { badges.appendChild(h('span', { 'class': 'badge warn', text: 'Straight line outside' })); }
@@ -1577,30 +1608,52 @@ dd.none{color:var(--muted)}
     box.appendChild(badges);
 
     var ol = h('ol', { 'class': 'steps' }), door = entranceById(outRoute.entrance);
-    function addStep(kind, ic, text, feet, tag) {
-      ol.appendChild(h('li', { 'class': 'step ' + kind }, [icon(ic), h('span', { 'class': 'txt' }, [text, tag ? h('span', { 'class': 'tag', text: tag }) : null]), h('span', { 'class': 'ft', text: feet ? feet + ' ft' : '' })]));
+    function addStep(kind, ic, text, feet, tag, button) {
+      ol.appendChild(h('li', { 'class': 'step ' + kind }, [icon(ic), h('span', { 'class': 'txt' }, [text, tag ? h('span', { 'class': 'tag', text: tag }) : null, button || null]), h('span', { 'class': 'ft', text: feet ? feet + ' ft' : '' })]));
     }
     if (outRoute.inside) {
       addStep('start', 'start', 'You seem to be inside. Starting from the nearest door: ' + door.name, 0);
     } else if (outRoute.straight) {
-      addStep('start', 'start', 'Start at your location', 0);
+      addStep('start', 'start', 'Start at ' + label, 0);
       addStep('walk', 'straight', 'Walk to the ' + door.name + ' (straight-line distance)', outFeet, 'Outside');
     } else {
       outRoute.steps.forEach(function (s) {
-        if (s.kind === 'start') { addStep('start', 'start', 'Start at your location', 0); return; }
+        if (s.kind === 'start') { addStep('start', 'start', 'Start at ' + label, 0); return; }
         addStep('walk', s.kind === 'arrive' ? (s.turn === 'straight' ? 'straight' : s.turn) : (s.turn || 'straight'), s.text, s.feet, 'Outside');
       });
     }
     dirs.steps.forEach(function (s) {
-      if (s.kind === 'start') { if (!outRoute.inside) { addStep('walk', 'start', 'Go in at the ' + door.name, 0); } return; }
+      if (s.kind === 'start') {
+        if (!outRoute.inside) {
+          var look = h('button', { 'class': 'golevel', type: 'button', text: 'Show inside' });
+          look.addEventListener('click', zoomToInside);
+          addStep('walk', 'start', 'Go in at the ' + door.name, 0, null, look);
+        }
+        return;
+      }
       var ic = s.kind === 'arrive' ? 'arrive' : (s.turn || 'straight');
       addStep(s.kind, ic, s.text, s.feet);
     });
     box.appendChild(ol);
     var notes = [];
-    if (outRoute.straight) { notes.push('The campus walkways are not loaded yet, so the outdoor part is a straight line, not a walking route. See campus/README.md to load them.'); }
-    notes.push('Your location comes from the phone and can be off by a few metres, more near tall buildings.');
+    if (outRoute.straight) { notes.push('The walkways do not connect from here in the map data, so the outdoor part is a straight line, not a walking route.'); }
+    if (mine) { notes.push('Your location comes from the phone and can be off by a few metres, more near tall buildings.'); }
+    else { notes.push('The walk starts at the side of ' + label + ' that faces Stokes. Walkways come from OpenStreetMap.'); }
     box.appendChild(h('p', { 'class': 'fine', text: notes.join(' ') }));
+  }
+
+  // Zooms in on the part of Stokes the route goes through (the building fills the screen, so the inside shows).
+  function zoomToInside() {
+    if (!route) { return; }
+    showLevel(route.levels[route.levels.length - 1]);
+    var b = null;
+    route.points.forEach(function (p, i) {
+      if (route.levels[i] !== curLevel) { return; }
+      b = b ? [Math.min(b[0], p[0]), Math.min(b[1], p[1]), Math.max(b[2], p[0]), Math.max(b[3], p[1])] : [p[0], p[1], p[0], p[1]];
+    });
+    if (!b) { return; }
+    var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2, hw = Math.max((b[2] - b[0]) / 2 + 120, 700), hh = Math.max((b[3] - b[1]) / 2 + 120, 500);
+    fitPlanBox([cx - hw, cy - hh, cx + hw, cy + hh], 30);
   }
 
   function copyLink(btn) {
@@ -1632,6 +1685,17 @@ dd.none{color:var(--muted)}
       row(dl, 'Indoor map', '', 'Not yet');
       row(dl, 'Data from', 'OpenStreetMap', '');
       box.appendChild(dl);
+      if (!isStokes(bp.name)) {
+        var go = h('button', { 'class': 'btn', type: 'button', style: 'margin-top:14px' }, [icon('start'), 'Start from here']);
+        go.addEventListener('click', function () {
+          // Make this building the starting point, and leave the "Going to" box free for the room.
+          var id = 'B:' + bp.osm;
+          sel = null; query = ''; input.value = ''; viaQuick = '';
+          setFrom(id);
+          input.focus();
+        });
+        box.appendChild(go);
+      }
       return;
     }
     if (sel.kind === 'room') {
@@ -1692,7 +1756,7 @@ dd.none{color:var(--muted)}
     route = null; dirs = null; outRoute = null;
     if (!sel || !from) { return; }
     if (sel.kind === 'building') { routeToBuilding(sel.o); return; }
-    if (from === 'ME') { routeFromYou(); return; }
+    if (from === 'ME' || isBuildingFrom(from)) { routeFromOutside(); return; }
     route = ML.routeTo(graph, from, sel, { accessible: accessible });
     if (route) { dirs = ML.describe(graph, route, titleOf(sel), { feetPerUnit: SCALE.feetPerUnit, levelNames: LEVEL_NAMES }); }
   }
@@ -1726,7 +1790,7 @@ dd.none{color:var(--muted)}
   }
 
   function setFrom(id) {
-    from = entranceById(id) || id === 'ME' ? id : '';
+    from = entranceById(id) || id === 'ME' || (isBuildingFrom(id) && buildingByOsm(id.slice(2))) ? id : '';
     lastRouteFix = null;
     if (from === 'ME' && !you && !locOn) { toggleLocate(); }
     $('from').value = from;
@@ -1738,9 +1802,9 @@ dd.none{color:var(--muted)}
   function quick(term, name) {
     var targets = search(term).filter(function (m) { return m.kind === 'room'; });
     if (!targets.length) { return; }
-    if (from === 'ME' && you) {
+    if ((from === 'ME' && you) || fromBuilding()) {
       var bestT = null, bestM = Infinity;
-      targets.forEach(function (t) { var p = planFromYou(t); if (p && p.meters < bestM) { bestM = p.meters; bestT = t; } });
+      targets.forEach(function (t) { var p = planFromOutside(t); if (p && p.meters < bestM) { bestM = p.meters; bestT = t; } });
       if (bestT) { choose(bestT, name.toLowerCase()); return; }
     } else if (entranceById(from)) {
       var best = ML.nearest(graph, from, targets, { accessible: accessible });
@@ -1770,7 +1834,14 @@ dd.none{color:var(--muted)}
   // ---------- Controls ----------
   function build() {
     $('from').appendChild(h('option', { value: 'ME', text: 'My location (GPS)' }));
-    ENTRANCES.forEach(function (en) { $('from').appendChild(h('option', { value: en.id, text: en.name })); });
+    var g1 = h('optgroup', { label: 'Stokes Hall doors' });
+    ENTRANCES.forEach(function (en) { g1.appendChild(h('option', { value: en.id, text: en.name })); });
+    $('from').appendChild(g1);
+    var g2 = h('optgroup', { label: 'Campus buildings' });
+    BLDGS.filter(function (f) { return !isStokes(f.properties.name); })
+      .sort(function (a, b) { return a.properties.name.localeCompare(b.properties.name); })
+      .forEach(function (f) { g2.appendChild(h('option', { value: 'B:' + f.properties.osm, text: f.properties.name })); });
+    $('from').appendChild(g2);
     $('from').addEventListener('change', function () { setFrom($('from').value); });
     $('accessible').addEventListener('change', function () { accessible = $('accessible').checked; update(true); });
     $('shownet').addEventListener('change', function () {
@@ -1868,7 +1939,7 @@ dd.none{color:var(--muted)}
   var start = readUrl(), saved = '', savedTheme = '';
   try { saved = localStorage.getItem('stokes-from') || ''; savedTheme = localStorage.getItem('stokes-theme') || ''; } catch (e) { /* storage blocked: fine */ }
   setTheme(savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
-  from = entranceById(start.from) || start.from === 'ME' ? start.from : (entranceById(saved) ? saved : '');
+  from = entranceById(start.from) || start.from === 'ME' || (isBuildingFrom(start.from) && buildingByOsm(start.from.slice(2))) ? start.from : (entranceById(saved) ? saved : '');
   $('from').value = from;
   accessible = start.accessible === '1';
   $('accessible').checked = accessible;

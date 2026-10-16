@@ -87,7 +87,10 @@ Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons nee
 
 ## What works now
 - Search a room (placeholder id, real room number, or words like "restrooms"). It highlights and zooms in.
-- "Starting from" picks an entrance (the green markers; tapping one picks it too) or My location (GPS).
+- "Starting from" picks an entrance (the green markers; tapping one picks it too), My location (GPS), or **any campus building**
+  (the dropdown lists them under "Campus buildings"; or search a building and press "Start from here"). A building start walks from the
+  side of that building that faces Stokes, along the real walkways, in the best door, and on to the room. The step list has a
+  "Show inside" button that zooms into Stokes. Building to building walking directions work too. Links keep it: `?from=B:way/123&room=S03`.
 - With a room and an entrance chosen, the map draws the shortest route and lists the steps.
 - "Accessible route" skips anything marked as steps or stairs. Level 1 has none marked yet, so for now it gives the same route.
 - "Show path network" draws every hallway line. Orange dashes = guessed, grey = clear on the brochure.
