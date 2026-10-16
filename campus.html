@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Campus map</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238c1d2f'/%3E%3Cpath d='M16 6a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z' fill='white'/%3E%3Ccircle cx='16' cy='13' r='2.6' fill='%238c1d2f'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css">
+<style>
+:root{
+  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --surface:#ffffff;--surface2:#f4f6fa;--fg:#0f1722;--muted:#5b6678;--line:#dde2ea;
+  --accent:#8c1d2f;--accent-soft:#f8e4e8;--route:#0a6cff;--warn:#9a5a06;--warn-soft:#fcefd2;
+  --shadow:0 1px 2px rgba(16,24,40,.08),0 10px 30px rgba(16,24,40,.14);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.45 var(--font);color:var(--fg);-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--route);outline-offset:2px}
+#map{position:absolute;inset:0}
+
+.panel{position:absolute;z-index:5;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+#search{top:12px;left:12px;width:min(380px,calc(100% - 24px));padding:10px}
+.row{display:flex;align-items:center;gap:10px}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--accent);flex:none;display:grid;place-items:center}
+.logo svg{width:20px;height:20px;fill:#fff}
+#q{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface2);border-radius:11px;padding:8px 12px;font-size:16px;outline:none}
+#q:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#results{margin-top:6px;display:flex;flex-direction:column;gap:2px}
+#results:empty{display:none}
+.res{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:10px;padding:8px 10px}
+.res:hover,.res:focus-visible{background:var(--surface2);border-color:var(--line)}
+.res small{color:var(--muted);font-size:12px;white-space:nowrap}
+.res b{font-weight:600}
+.none{color:var(--muted);font-size:14px;padding:6px 10px}
+
+#info{left:12px;bottom:28px;width:min(380px,calc(100% - 24px));padding:14px 16px}
+#info[hidden],#note[hidden]{display:none}
+#info h2{margin:0 0 2px;font-size:18px;letter-spacing:-.01em}
+#info p{margin:4px 0 0;color:var(--muted);font-size:14px}
+.badge{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px;background:var(--surface2);border:1px solid var(--line);color:var(--muted)}
+.badge.yes{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.go{display:inline-flex;align-items:center;margin-top:12px;border:0;border-radius:11px;background:var(--accent);color:#fff;font-weight:650;padding:9px 16px;text-decoration:none}
+.go:hover{filter:brightness(1.1)}
+.x{position:absolute;top:8px;right:8px;width:30px;height:30px;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:20px;line-height:1}
+.x:hover{background:var(--surface2)}
+
+#note{top:76px;left:12px;width:min(380px,calc(100% - 24px));padding:12px 14px;background:var(--warn-soft);color:var(--warn);border-color:transparent;font-size:13.5px}
+#note b{display:block;margin-bottom:2px}
+#note code{font:12.5px ui-monospace,Menlo,Consolas,monospace}
+
+@media (max-width:599px){#info{bottom:36px}#search,#note{width:calc(100% - 64px)}}
+.maplibregl-ctrl-bottom-left{margin-bottom:2px}
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Campus map"></div>
+
+<section class="panel" id="search" aria-label="Find a building">
+  <div class="row">
+    <span class="logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.200-7-11.500a7 7 0 0 1 14 0C19 14.800 12 21 12 21z"/></svg></span>
+    <input id="q" type="search" placeholder="Find a building" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Find a building">
+  </div>
+  <div id="results" role="listbox" aria-live="polite"></div>
+</section>
+
+<section class="panel" id="note" hidden role="status"></section>
+<section class="panel" id="info" hidden aria-live="polite"></section>
+
+<script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+<script src="campus/config.js"></script>
+<script>
+(function () {
+  var C = window.CAMPUS;
+  var EMPTY = { type: 'FeatureCollection', features: [] };
+  var $ = function (id) { return document.getElementById(id); };
+  var features = [], failed = 0;
+
+  // The base map. This draws OpenStreetMap's public tiles, which is fine while building and testing on your own
+  // computer. Before a real launch, replace it with tiles you host yourself (campus/README.md).
+  var style = {
+    version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources: {
+      base: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, maxzoom: 19, attribution: '&copy; OpenStreetMap contributors' }
+    },
+    layers: [{ id: 'base', type: 'raster', source: 'base' }]
+  };
+
+  var map = new maplibregl.Map({ container: 'map', style: style, center: C.center, zoom: C.zoom, maxZoom: 20, attributionControl: { compact: true } });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
+  // The blue dot. Outdoors it works straight from the phone's GPS, so it needs no calibration.
+  // (It only works on https pages or on localhost.)
+  map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true, showAccuracyCircle: true }), 'top-right');
+  map.addControl(new maplibregl.ScaleControl({ unit: 'imperial' }), 'bottom-left');
+
+  function load(url) {
+    return fetch(url).then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.json(); }).catch(function () { failed++; return EMPTY; });
+  }
+
+  function indoorFor(name) {
+    var n = String(name || '').toLowerCase(), hit = null;
+    Object.keys(C.indoor || {}).forEach(function (k) { if (n && n.indexOf(k.toLowerCase()) > -1) { hit = C.indoor[k]; } });
+    return hit;
+  }
+
+  // Middle of a shape's bounding box, as [lng, lat], plus the box itself for fitting the view.
+  function boxOf(coords, b) {
+    b = b || [Infinity, Infinity, -Infinity, -Infinity];
+    if (typeof coords[0] === 'number') {
+      b[0] = Math.min(b[0], coords[0]); b[1] = Math.min(b[1], coords[1]); b[2] = Math.max(b[2], coords[0]); b[3] = Math.max(b[3], coords[1]);
+    } else { coords.forEach(function (c) { boxOf(c, b); }); }
+    return b;
+  }
+
+  function showNote(html) { var n = $('note'); n.innerHTML = html; n.hidden = !html; }
+
+  function select(f) {
+    map.setFilter('building-sel', ['==', ['get', 'uid'], f ? f.properties.uid : -1]);
+    var box = $('info');
+    box.textContent = '';
+    if (!f) { box.hidden = true; return; }
+    var p = f.properties, name = p.name || 'Unnamed building', page = indoorFor(p.name);
+    var x = document.createElement('button');
+    x.className = 'x'; x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.textContent = '×';
+    x.addEventListener('click', function () { select(null); });
+    var h = document.createElement('h2'); h.textContent = name;
+    var badge = document.createElement('span');
+    badge.className = 'badge' + (page ? ' yes' : ''); badge.textContent = page ? 'Indoor map available' : 'No indoor map yet';
+    box.appendChild(x); box.appendChild(h); box.appendChild(badge);
+    if (page) {
+      var a = document.createElement('a'); a.className = 'go'; a.href = page; a.textContent = 'Open indoor map';
+      box.appendChild(a);
+    } else {
+      var t = document.createElement('p'); t.textContent = 'Floor plans for this building have not been added yet.'; box.appendChild(t);
+    }
+    box.hidden = false;
+  }
+
+  function fly(f) {
+    var b = boxOf(f.geometry.coordinates);
+    map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: { top: 90, bottom: 200, left: 40, right: 40 }, maxZoom: 19, duration: 900 });
+    select(f);
+  }
+
+  // ---------- Search ----------
+  function runSearch(q) {
+    var box = $('results');
+    box.textContent = '';
+    var toks = q.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!toks.length) { return; }
+    var hits = features.filter(function (f) {
+      var n = String(f.properties.name || '').toLowerCase();
+      return n && toks.every(function (t) { return n.indexOf(t) > -1; });
+    }).slice(0, 6);
+    if (!hits.length) { var none = document.createElement('div'); none.className = 'none'; none.textContent = features.length ? 'No building with that name.' : 'No buildings loaded yet.'; box.appendChild(none); return; }
+    hits.forEach(function (f) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'res'; b.setAttribute('role', 'option');
+      var n = document.createElement('b'); n.textContent = f.properties.name;
+      b.appendChild(n);
+      if (indoorFor(f.properties.name)) { var s = document.createElement('small'); s.textContent = 'Indoor map'; b.appendChild(s); }
+      b.addEventListener('click', function () { box.textContent = ''; $('q').value = f.properties.name; $('q').blur(); fly(f); });
+      box.appendChild(b);
+    });
+  }
+  $('q').addEventListener('input', function () { runSearch($('q').value); });
+  $('q').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { var first = $('results').querySelector('.res'); if (first) { first.click(); } }
+    else if (e.key === 'Escape') { $('q').value = ''; $('results').textContent = ''; $('q').blur(); }
+  });
+
+  // ---------- Map layers ----------
+  map.on('load', function () {
+    Promise.all([load('campus/buildings.geojson'), load('campus/paths.geojson'), load('campus/entrances.geojson')]).then(function (d) {
+      var buildings = d[0], paths = d[1], entrances = d[2];
+      buildings.features.forEach(function (f, i) {
+        f.properties = f.properties || {};
+        f.properties.uid = i;
+        f.properties.hasIndoor = !!indoorFor(f.properties.name);
+      });
+      features = buildings.features;
+
+      map.addSource('buildings', { type: 'geojson', data: buildings });
+      map.addSource('paths', { type: 'geojson', data: paths });
+      map.addSource('entrances', { type: 'geojson', data: entrances });
+
+      // Walking paths. Steps are drawn dashed and red so you can see where a route is not step-free.
+      map.addLayer({ id: 'paths', type: 'line', source: 'paths', filter: ['!=', ['get', 'highway'], 'steps'],
+        paint: { 'line-color': '#2b6cb0', 'line-opacity': 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1, 19, 4] } });
+      map.addLayer({ id: 'paths-steps', type: 'line', source: 'paths', filter: ['==', ['get', 'highway'], 'steps'],
+        paint: { 'line-color': '#c0392b', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 19, 5], 'line-dasharray': [1, 1] } });
+
+      // Buildings. Ones with an indoor map are drawn in BC maroon.
+      map.addLayer({ id: 'buildings', type: 'fill', source: 'buildings',
+        paint: { 'fill-color': ['case', ['get', 'hasIndoor'], '#8c1d2f', '#6b7a90'], 'fill-opacity': ['case', ['get', 'hasIndoor'], 0.45, 0.28] } });
+      map.addLayer({ id: 'buildings-line', type: 'line', source: 'buildings',
+        paint: { 'line-color': ['case', ['get', 'hasIndoor'], '#8c1d2f', '#5b6678'], 'line-width': 1.2 } });
+      map.addLayer({ id: 'building-sel', type: 'line', source: 'buildings', filter: ['==', ['get', 'uid'], -1],
+        paint: { 'line-color': '#0a6cff', 'line-width': 4 } });
+      map.addLayer({ id: 'building-names', type: 'symbol', source: 'buildings', minzoom: 16,
+        filter: ['has', 'name'],
+        layout: { 'text-field': ['get', 'name'], 'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 19, 14], 'text-max-width': 7 },
+        paint: { 'text-color': '#1b2330', 'text-halo-color': 'rgba(255,255,255,.9)', 'text-halo-width': 1.6 } });
+
+      // Entrances: the points where outdoors joins the indoor maps.
+      map.addLayer({ id: 'entrances', type: 'circle', source: 'entrances', minzoom: 17,
+        paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 17, 4, 20, 8], 'circle-color': '#12804d', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+
+      map.on('click', 'buildings', function (e) {
+        var f = e.features && e.features[0];
+        if (!f) { return; }
+        select(features[f.properties.uid] || f);
+      });
+      map.on('click', function (e) {
+        if (!map.queryRenderedFeatures(e.point, { layers: ['buildings'] }).length) { select(null); }
+      });
+      map.on('mouseenter', 'buildings', function () { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', 'buildings', function () { map.getCanvas().style.cursor = ''; });
+
+      if (failed === 3 && location.protocol === 'file:') {
+        showNote('<b>Open this page through a local server.</b>Browsers will not load the map data from a file. In this folder run <code>python3 -m http.server 8000</code>, then open <code>http://localhost:8000/campus.html</code>.');
+      } else if (!features.length) {
+        showNote('<b>No campus data yet.</b>The map is showing the base map only. Follow <code>campus/README.md</code> to import the buildings, paths and entrances.');
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

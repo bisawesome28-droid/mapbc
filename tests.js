@@ -388,5 +388,52 @@ test('real data: Level 1 routes never wander upstairs', function () {
   });
 });
 
+// ---------- Outdoor campus map ----------
+
+var OSM = require('./tools/osm_to_campus.js');
+var sampleExport = { type: 'FeatureCollection', features: [
+  { id: 'way/1', properties: { building: 'university', name: 'Test Hall', 'building:levels': '4' }, geometry: { type: 'Polygon', coordinates: [[[-71.1700, 42.3350], [-71.1698, 42.3350], [-71.1698, 42.3352], [-71.1700, 42.3350]]] } },
+  { id: 'way/2', properties: { building: 'yes' }, geometry: { type: 'Polygon', coordinates: [[[-71.1690, 42.3350], [-71.1688, 42.3350], [-71.1688, 42.3352], [-71.1690, 42.3350]]] } },
+  { id: 'way/3', properties: { highway: 'footway', surface: 'paved' }, geometry: { type: 'LineString', coordinates: [[-71.1699, 42.3349], [-71.1695, 42.3349]] } },
+  { id: 'way/4', properties: { highway: 'steps', step_count: '12' }, geometry: { type: 'LineString', coordinates: [[-71.1695, 42.3349], [-71.1694, 42.3351]] } },
+  { id: 'way/5', properties: { highway: 'motorway' }, geometry: { type: 'LineString', coordinates: [[-71.18, 42.33], [-71.17, 42.34]] } },
+  { id: 'node/6', properties: { entrance: 'main', name: 'Front door' }, geometry: { type: 'Point', coordinates: [-71.16991234567, 42.3349] } },
+  { id: 'node/7', properties: { natural: 'tree' }, geometry: { type: 'Point', coordinates: [-71.169, 42.335] } }
+] };
+
+test('campus import: sorts a mixed OpenStreetMap export into buildings, paths and entrances', function () {
+  var out = OSM.convert(sampleExport);
+  assert.deepStrictEqual(out.report, { buildings: 2, namedBuildings: 1, paths: 2, entrances: 1, skipped: 2 });
+  assert.strictEqual(out.buildings.features[0].properties.name, 'Test Hall', 'named buildings come first');
+  assert.strictEqual(out.buildings.features[0].properties.kind, 'university');
+  assert.strictEqual(out.paths.features[1].properties.step_count, '12');
+});
+
+test('campus import: rounds coordinates and keeps longitude first', function () {
+  var c = OSM.convert(sampleExport).entrances.features[0].geometry.coordinates;
+  assert.deepStrictEqual(c, [-71.1699123, 42.3349]);
+});
+
+test('campus import: empty or odd input does not crash', function () {
+  assert.strictEqual(OSM.convert({}).report.buildings, 0);
+  assert.strictEqual(OSM.convert({ features: [{ properties: {}, geometry: null }] }).report.skipped, 1);
+});
+
+test('campus config: centre is [longitude, latitude] and inside Massachusetts', function () {
+  require('./campus/config.js');
+  var C = global.window.CAMPUS;
+  assert.ok(C && C.center && C.center.length === 2, 'CAMPUS.center needs [lng, lat]');
+  assert.ok(C.center[0] < -69 && C.center[0] > -74, 'first number should be the longitude (about -71), got ' + C.center[0]);
+  assert.ok(C.center[1] > 41 && C.center[1] < 43, 'second number should be the latitude (about 42), got ' + C.center[1]);
+});
+
+test('campus files: the shipped data files are valid GeoJSON', function () {
+  ['buildings', 'paths', 'entrances'].forEach(function (n) {
+    var j = JSON.parse(require('fs').readFileSync(__dirname + '/campus/' + n + '.geojson', 'utf8'));
+    assert.strictEqual(j.type, 'FeatureCollection', n + '.geojson');
+    j.features.forEach(function (f) { assert.ok(f.geometry && f.geometry.coordinates, n + ' has a feature with no shape'); });
+  });
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
