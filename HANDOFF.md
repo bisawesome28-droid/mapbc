@@ -2,8 +2,14 @@
 - `schools/` holds all map data as JSON: one folder per school, one file per building. See `docs/DATA_FORMAT.md`.
 - `core/` holds the shared code (routes, search, floor plans as map shapes, map style). A native app uses the same files.
 - `web/` holds the web page only (`web/app.js`, `web/app.css`); `index.html` is just the page shell.
-- To add a building, follow `docs/ADDING_A_BUILDING.md`. Stokes Hall and McElroy Commons (floors 2 and 3) are mapped.
+- To add a building, follow `docs/ADDING_A_BUILDING.md`. Mapped so far: Stokes Hall, McElroy Commons (floors 2 and 3) and
+  O'Neill Library (levels 1 to 5).
 - McElroy floor 1 is not mapped yet; the page shows it greyed out.
+- O'Neill comes from the library's 2019 floor map handout (the 2013 map only fills gaps, such as the note that Level 2's
+  classrooms 245 to 257 need a BC ID). The handout is drawn turned: its left is real north, its top real east. Door spots, the
+  walks through rooms and the aisles between the book stacks are guesses until someone walks them.
+- `node tests.js` checks every building of every school on its own (no data problems, GPS fit, every room reachable from every
+  entrance, step-free where there is an elevator), so a new building file is tested without writing new tests.
 
 # BC Campus Map: handoff notes
 

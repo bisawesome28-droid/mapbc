@@ -11,7 +11,9 @@
       {"type": "Feature", "properties": {"name": "East end entrance", "building": "Cheverus Hall", "entrance": "yes", "source": "BC floor plan", "guess": true}, "geometry": {"type": "Point", "coordinates": [-71.1747992,42.3343741]}},
       {"type": "Feature", "properties": {"name": "West end entrance", "building": "Cheverus Hall", "entrance": "yes", "source": "BC floor plan", "guess": true}, "geometry": {"type": "Point", "coordinates": [-71.1753854,42.3342758]}},
       {"type": "Feature", "properties": {"name": "Side entrance (east corner of the wing)", "building": "Cheverus Hall", "entrance": "yes", "source": "BC floor plan", "guess": true}, "geometry": {"type": "Point", "coordinates": [-71.1749838,42.3342941]}},
-      {"type": "Feature", "properties": {"name": "Side entrance (west corner of the wing)", "building": "Cheverus Hall", "entrance": "yes", "source": "BC floor plan", "guess": true}, "geometry": {"type": "Point", "coordinates": [-71.1751685,42.3343005]}}
+      {"type": "Feature", "properties": {"name": "Side entrance (west corner of the wing)", "building": "Cheverus Hall", "entrance": "yes", "source": "BC floor plan", "guess": true}, "geometry": {"type": "Point", "coordinates": [-71.1751685,42.3343005]}},
+      {"type": "Feature", "properties": {"name": "Stairwell, northeast corner by Campanella Way", "building": "Comm. Ave. Garage", "entrance": "yes", "stairs": "yes", "wheelchair": "no", "source": "satellite photo marked by the project owner (Oct 2026)", "guess": true}, "geometry": {"type": "Point", "coordinates": [-71.1687433,42.3372129]}},
+      {"type": "Feature", "properties": {"name": "Elevator, east side by Campanella Way", "building": "Comm. Ave. Garage", "entrance": "yes", "elevator": "yes", "wheelchair": "yes", "source": "satellite photo marked by the project owner (Oct 2026)", "guess": true}, "geometry": {"type": "Point", "coordinates": [-71.1686401,42.3369626]}}
     ]
   },
   "lobbies": {

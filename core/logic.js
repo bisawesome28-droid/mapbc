@@ -55,6 +55,11 @@
       var c2 = String(codes[j] || '').toLowerCase();
       if (c2 && c2.indexOf(qq) === 0) { return 1; }
     }
+    // Then a match on the name beats a match only on keywords, so "scan lab" lists the Scan Lab first.
+    var name = String((kind === 'room' ? o.name : o.label) || '').toLowerCase();
+    if (name === qq) { return 1.2; }
+    if (name.indexOf(qq) > -1) { return 1.5; }
+    if (tokens(q).every(function (t) { return name.indexOf(t) > -1; })) { return 1.7; }
     return 2;
   }
 

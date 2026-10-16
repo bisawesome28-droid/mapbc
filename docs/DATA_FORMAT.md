@@ -9,13 +9,13 @@ schools/index.json            which schools exist and which one opens by default
 schools/<school>/school.json  the school: centre, colours, which buildings it has
 schools/<school>/campus/      outdoor data: data.json (buildings, walkways, entrances), base.json (grass, roads,
                               trees, houses, heights), extras.json (hand-added entrances and lobbies)
-schools/<school>/buildings/   one file per building with an indoor map, e.g. stokes.json, mcelroy.json
+schools/<school>/buildings/   one file per building with an indoor map, e.g. stokes.json, mcelroy.json, oneill.json
 ```
 
 ## Coordinates
 - Outdoor: `[longitude, latitude]` (longitude first).
 - Indoor plan: `x, y` in plan units, the pixels of the building's posted plan. Stokes is 20.6 units per metre;
-  McElroy is 20 per metre. `geo.points` ties the plan to latitude and longitude (at least two points, three or four
+  McElroy is 20 per metre; O'Neill about 19.7. `geo.points` ties the plan to latitude and longitude (at least two points, three or four
   is better, and a bad point is flagged by the tests).
 - Plans drawn turned: say so in the file's `about` text and use real compass words in names.
 
@@ -41,3 +41,5 @@ Room `type`: `classroom`, `office`, `service`, `it`, `common`, `conf`, `core` (s
 ## Campus files
 `data.json` and `base.json` are written by `tools/osm_to_campus.js` from an OpenStreetMap export
 (`schools/<school>/campus/osm_export.geojson`, not committed). Hand additions go in `extras.json`.
+A hand-added entrance names its `building` (the OpenStreetMap name). `"wheelchair": "no"` (a stairwell, for example) keeps
+step-free routes from using that door; `"guess": true` means not checked on site.
