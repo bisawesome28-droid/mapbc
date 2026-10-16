@@ -211,7 +211,11 @@ dd.none{color:var(--muted)}
 .netkey i{display:inline-block;width:20px;height:0;border-top:3px solid var(--muted);vertical-align:middle;margin-right:6px}
 .netkey i.g{border-top:3px dashed #e28a1c}
 .zoom button .ico{width:20px;height:20px}
-.zoom #locate[aria-pressed=true]{background:var(--route);color:#fff}
+.zoom #locate[aria-pressed=true],.zoom #tilt[aria-pressed=true]{background:var(--route);color:#fff}
+.zoom #tilt:disabled{opacity:.35;pointer-events:none}
+#from[hidden]{display:none!important}
+#fromresults:empty{display:none}
+#fromresults{margin:-4px 0 4px}
 .floors{position:absolute;top:196px;right:12px;display:flex;flex-direction:column;overflow:hidden}
 .floors button{width:40px;height:38px;border:0;background:transparent;font-size:15px;font-weight:800;color:var(--muted)}
 .floors button + button{border-top:1px solid var(--line)}
@@ -367,10 +371,11 @@ dd.none{color:var(--muted)}
       <div class="fields">
         <div class="field" id="fromfield">
           <span class="pin from"></span>
-          <label for="from">Starting from</label>
-          <select id="from"><option value="">Choose where you start</option></select>
-          <span class="chev ico" id="chev"></span>
+          <label for="fromq">Starting from</label>
+          <input id="fromq" type="search" placeholder="My location, a building, or a Stokes door" autocomplete="off" spellcheck="false" enterkeyhint="search" role="combobox" aria-expanded="false" aria-controls="fromresults">
+          <select id="from" hidden aria-hidden="true" tabindex="-1"><option value="">Choose where you start</option></select>
         </div>
+        <div class="results" id="fromresults" role="listbox" aria-label="Places to start from"></div>
         <div class="field">
           <span class="pin to"></span>
           <label for="q">Going to</label>
@@ -406,6 +411,7 @@ dd.none{color:var(--muted)}
         <button id="zin" aria-label="Zoom in">+</button>
         <button id="zout" aria-label="Zoom out">&minus;</button>
         <button id="zreset" class="all" aria-label="Show the whole building" title="Show the whole building">All</button>
+        <button id="tilt" class="all" type="button" aria-pressed="false" aria-label="Tilt the map to see buildings in 3D" title="Tilt the map to see buildings in 3D">3D</button>
       </div>
       <div class="floors glass" id="floors" role="group" aria-label="Choose a floor"></div>
       <div class="levelbar glass" id="levelbar" aria-live="polite"></div>
@@ -431,7 +437,7 @@ dd.none{color:var(--muted)}
   if (graph.problems.length) { console.warn('Path network problems:\n' + graph.problems.join('\n')); }
   var STEP_EDGES = PATHS.edges.filter(function (e) { return e.kind === 'steps' || e.kind === 'stair'; }).length;
 
-  var VERSION = '2026-10-16 j'; // bump when you publish a change, so you can see which copy of the page is running
+  var VERSION = '2026-10-16 k'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -519,7 +525,7 @@ dd.none{color:var(--muted)}
   }
   $('level').textContent = B.level;
   renderHeader(false);
-  fillIcon('logoico', 'pin'); fillIcon('chev', 'chev'); fillIcon('locico', 'crosshair');
+  fillIcon('logoico', 'pin'); fillIcon('locico', 'crosshair');
 
   // ---------- Map drawing ----------
   // The plan is drawn like an architect's floor plan: outside walls with buttresses, rooms with
@@ -876,6 +882,7 @@ dd.none{color:var(--muted)}
     // without a room or a route selected.
     var op = Math.max(0, Math.min(1, (buildingFill() - SHOW_INSIDE_AT) / FADE_OVER));
     if (map.getPitch() > 0.5) { op = 0; } // the plan is flat: it only shows looking straight down
+    $('tilt').disabled = op > 0; // looking inside is always flat
     if (map.getLayer('stokes-3d')) {
       var gone = op > 0;
       if (gone !== stokesHidden) {
@@ -1009,7 +1016,7 @@ dd.none{color:var(--muted)}
   var STOKES_HEIGHT = 20;
   // The opening view is tilted so the buildings show in 3D. Looking inside a building always goes back to
   // straight down, because the floor plan is flat.
-  var OPEN_PITCH = 45, MAX_PITCH = 60;
+  var TILT_PITCH = 45, MAX_PITCH = 60; // 3D is optional: the map opens flat and the "3D" button tilts it
   var BASE = window.CAMPUS_BASE || null, STYLE = window.CAMPUS_STYLE || null;
 
   function initMap() {
@@ -1038,12 +1045,13 @@ dd.none{color:var(--muted)}
     window.mapbcMap = map; // handy for testing and for poking at the map from the browser console
     map.on('move', applyView);
     map.on('moveend', flattenIfInside);
+    map.on('pitch', function () { $('tilt').setAttribute('aria-pressed', map.getPitch() > 0.5 ? 'true' : 'false'); });
     map.on('resize', applyView);
     map.on('click', onMapClick);
     applyView();
     // Open on the building with campus around it: a little further out than "the building fits", tilted.
     var cam = measureFit();
-    if (cam) { map.jumpTo({ center: cam.center, zoom: cam.zoom - START_ZOOM_OUT, pitch: REDUCED ? 0 : OPEN_PITCH }); }
+    if (cam) { map.jumpTo({ center: cam.center, zoom: cam.zoom - START_ZOOM_OUT, pitch: 0 }); }
     applyView();
   }
 
@@ -1617,6 +1625,7 @@ dd.none{color:var(--muted)}
     SPOTS.forEach(function (s) { spotEls[s.id].classList.toggle('sel', !!sel && sel.kind === 'spot' && sel.o.id === s.id); });
     ENTRANCES.forEach(function (en) { entrEls[en.id].classList.toggle('on', en.id === from); });
     $('fromfield').classList.toggle('need', !!sel && !from);
+    syncFromBox();
   }
 
   // ---------- Cards ----------
@@ -1917,6 +1926,7 @@ dd.none{color:var(--muted)}
     lastRouteFix = null;
     if (from === 'ME' && !you && !locOn) { toggleLocate(); }
     $('from').value = from;
+    syncFromBox();
     try { localStorage.setItem('stokes-from', from); } catch (e) { /* storage blocked: fine */ }
     update(true);
   }
@@ -1954,18 +1964,86 @@ dd.none{color:var(--muted)}
     return p;
   }
 
+  // ---------- "Starting from" search box ----------
+  var fromActive = 0, fromShown = [];
+  function fromChoices() {
+    var out = [{ id: 'ME', name: 'My location (GPS)', sub: 'Use the blue dot' }];
+    ENTRANCES.forEach(function (en) { out.push({ id: en.id, name: en.name, sub: 'Stokes Hall door' }); });
+    BLDGS.forEach(function (f) { if (!isStokes(f.properties.name)) { out.push({ id: 'B:' + f.properties.osm, name: f.properties.name, sub: 'Campus building' }); } });
+    return out;
+  }
+  function fromLabel(id) {
+    if (id === 'ME') { return 'My location (GPS)'; }
+    var en = entranceById(id); if (en) { return en.name; }
+    var b = isBuildingFrom(id) ? buildingByOsm(id.slice(2)) : null;
+    return b ? b.properties.name : '';
+  }
+  // Matches that start with what you typed first, then ones with a word that starts with it, then the rest.
+  function fromSearch(q) {
+    q = q.trim().toLowerCase();
+    var all = fromChoices();
+    if (!q) { return all.slice(0, 1 + ENTRANCES.length); }
+    var scored = [];
+    all.forEach(function (c) {
+      var n = c.name.toLowerCase(), i = n.indexOf(q), score = -1;
+      if (i === 0) { score = 0; } else if (i > 0 && /[\s\-(]/.test(n.charAt(i - 1))) { score = 1; } else if (i > 0) { score = 2; }
+      else if (q.split(/\s+/).every(function (w) { return n.indexOf(w) >= 0; })) { score = 3; }
+      if (score >= 0) { scored.push({ c: c, score: score }); }
+    });
+    scored.sort(function (a, b) { return a.score - b.score || a.c.name.localeCompare(b.c.name); });
+    return scored.map(function (x) { return x.c; });
+  }
+  function startFromSearch() {
+    var box = $('fromq'), list = $('fromresults');
+    function close() { list.textContent = ''; fromShown = []; box.setAttribute('aria-expanded', 'false'); }
+    function show() {
+      list.textContent = '';
+      var res = fromSearch(box.dataset.typing === '1' ? box.value : '');
+      fromShown = res.slice(0, 8);
+      box.setAttribute('aria-expanded', fromShown.length ? 'true' : 'false');
+      if (!res.length) { list.appendChild(h('div', { 'class': 'noneline', text: 'No match. Try a building name, like "O\'Neill", or "My location".' })); return; }
+      fromShown.forEach(function (c, i) {
+        var b = h('button', { 'class': 'res' + (i === fromActive ? ' active' : ''), type: 'button', role: 'option' }, [
+          h('span', { 'class': 'sw' }),
+          h('span', { 'class': 't' }, [h('b', { text: c.name }), h('small', { text: c.sub })])
+        ]);
+        b.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep focus so the click lands
+        b.addEventListener('click', function () { pick(c); });
+        list.appendChild(b);
+      });
+      if (res.length > fromShown.length) { list.appendChild(h('div', { 'class': 'noneline', text: (res.length - fromShown.length) + ' more. Type more letters to narrow it down.' })); }
+      else if (box.dataset.typing !== '1') { list.appendChild(h('div', { 'class': 'noneline', text: 'Or type a campus building, like "O\'Neill".' })); }
+    }
+    function pick(c) { box.dataset.typing = '0'; close(); box.blur(); setFrom(c.id); }
+    box.addEventListener('focus', function () { box.dataset.typing = '0'; fromActive = 0; box.select(); show(); });
+    box.addEventListener('input', function () { box.dataset.typing = '1'; fromActive = 0; show(); });
+    box.addEventListener('blur', function () { box.dataset.typing = '0'; close(); syncFromBox(); });
+    box.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown' && fromShown.length) { e.preventDefault(); fromActive = (fromActive + 1) % fromShown.length; show(); }
+      else if (e.key === 'ArrowUp' && fromShown.length) { e.preventDefault(); fromActive = (fromActive - 1 + fromShown.length) % fromShown.length; show(); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (fromShown.length) { pick(fromShown[fromActive] || fromShown[0]); } }
+      else if (e.key === 'Escape') { close(); box.blur(); }
+    });
+    $('from').addEventListener('change', function () { setFrom($('from').value); }); // (tests and old links set it directly)
+  }
+  // The box shows the chosen place, unless you are in the middle of typing.
+  function syncFromBox() {
+    var box = $('fromq');
+    if (!box || document.activeElement === box) { return; }
+    box.value = fromLabel(from);
+  }
+
   // ---------- Controls ----------
   function build() {
-    $('from').appendChild(h('option', { value: 'ME', text: 'My location (GPS)' }));
-    var g1 = h('optgroup', { label: 'Stokes Hall doors' });
-    ENTRANCES.forEach(function (en) { g1.appendChild(h('option', { value: en.id, text: en.name })); });
-    $('from').appendChild(g1);
-    var g2 = h('optgroup', { label: 'Campus buildings' });
+    // Places you can start from. The hidden <select id="from"> keeps the chosen one (the rest of the page reads it);
+    // the visible box searches this list, so there is no giant drop-down.
+    var sf = $('from');
+    sf.appendChild(h('option', { value: 'ME', text: 'My location (GPS)' }));
+    ENTRANCES.forEach(function (en) { sf.appendChild(h('option', { value: en.id, text: en.name })); });
     BLDGS.filter(function (f) { return !isStokes(f.properties.name); })
       .sort(function (a, b) { return a.properties.name.localeCompare(b.properties.name); })
-      .forEach(function (f) { g2.appendChild(h('option', { value: 'B:' + f.properties.osm, text: f.properties.name })); });
-    $('from').appendChild(g2);
-    $('from').addEventListener('change', function () { setFrom($('from').value); });
+      .forEach(function (f) { sf.appendChild(h('option', { value: 'B:' + f.properties.osm, text: f.properties.name })); });
+    startFromSearch();
     $('accessible').addEventListener('change', function () { accessible = $('accessible').checked; update(true); });
     $('shownet').addEventListener('change', function () {
       drawNetwork();
@@ -2018,6 +2096,10 @@ dd.none{color:var(--muted)}
     $('zin').addEventListener('click', function () { zoomBy(0.7); });
     $('zout').addEventListener('click', function () { zoomBy(1.4); });
     $('zreset').addEventListener('click', function () { showAll(true); });
+    $('tilt').addEventListener('click', function () {
+      if (!map) { return; }
+      map.easeTo({ pitch: map.getPitch() > 0.5 ? 0 : TILT_PITCH, duration: REDUCED ? 0 : 500 });
+    });
 
     $('theme').addEventListener('click', function () {
       var cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -2063,7 +2145,7 @@ dd.none{color:var(--muted)}
   try { saved = localStorage.getItem('stokes-from') || ''; savedTheme = localStorage.getItem('stokes-theme') || ''; } catch (e) { /* storage blocked: fine */ }
   setTheme(savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), false);
   from = entranceById(start.from) || start.from === 'ME' || (isBuildingFrom(start.from) && buildingByOsm(start.from.slice(2))) ? start.from : (entranceById(saved) ? saved : '');
-  $('from').value = from;
+  $('from').value = from; syncFromBox();
   accessible = start.accessible === '1';
   $('accessible').checked = accessible;
   ROOMS.forEach(function (r) { if (r.id === start.room) { sel = { kind: 'room', o: r }; } });

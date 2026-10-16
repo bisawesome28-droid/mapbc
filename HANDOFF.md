@@ -37,10 +37,11 @@ and plan to pitch schools to supply their own floor plans. Stokes Hall Level 1 i
   roads, paths, parking, water, trees, nearby houses and each building's height; `campus/style.js` says how each is drawn
   (colours for light and dark mode, line widths, 3D buildings, labels) in MapLibre's standard style format, which the iOS and
   Android versions of MapLibre also read. Restyle the map by editing `PALETTES` in style.js.
-- **Tilt:** the map opens tilted 45 degrees so buildings show in 3D. Tilt with a right-drag (or ctrl-drag) on a laptop, or two fingers
-  up/down on a phone. North stays up. The floor plan is flat, so it only shows looking straight down: zooming into Stokes while tilted
+- **Tilt (3D is optional):** the map opens flat (2D). The "3D" button next to the zoom buttons tilts it 45 degrees so buildings show in 3D
+  (`TILT_PITCH` in index.html); you can also right-drag or ctrl-drag on a laptop, or use two fingers up/down on a phone. The button is
+  greyed out while looking inside Stokes. North stays up. The floor plan is flat, so it only shows looking straight down: zooming into Stokes while tilted
   tips the map flat (`flattenIfInside`), and picking a room, "All" and "Show inside" go flat too. Picking a campus building or
-  planning a walk keeps the tilt.
+  planning a walk keeps whatever tilt you chose.
 - **Building heights:** only 36 of about 1,860 buildings in the area have a height or floor count in OpenStreetMap; the rest are
   guesses (campus buildings 15 m, residence halls 17 m, houses 8 m), marked `guess: 1` in base.js. Stokes is drawn 20 m tall
   (`STOKES_HEIGHT` in index.html, a guess). Adding `building:levels` in OpenStreetMap fixes a building on the next import.
@@ -57,6 +58,7 @@ and plan to pitch schools to supply their own floor plans. Stokes Hall Level 1 i
   It is a .js file (not .geojson) so the page works from disk.
 - To refresh it: `python3 tools/fetch_osm.py` (downloads the BC area from api.openstreetmap.org in small squares), then
   `node tools/osm_to_campus.js campus/osm_export.geojson`. The raw export is not committed (.gitignore).
+- "Starting from" is a search box (type "o'neill"; with nothing typed it lists My location and the Stokes doors). The page keeps the chosen place in a hidden `<select id="from">`, so code and tests can still set `#from`.
 - "Starting from" has **My location (GPS)**. The route goes outdoors to the best door, then inside (`ML.campusRoute`): it tries every
   ground-floor entrance and keeps the shortest total walk. The step-free option avoids outdoor "steps" paths and paths tagged wheelchair=no.
 - Outdoor turns are named after the nearest building (within 30 m), because most campus walkways have no name:
