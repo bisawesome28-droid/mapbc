@@ -27,6 +27,29 @@
 - Seating rows, stair treads, elevator X marks and restroom symbols are drawn from simple rules ("seating", "stair", "cars", "restroom" in data.js). They show the kind of room, not exact furniture.
 - All door positions are guesses. Hallways marked "guess": true need checking on site.
 
+## GPS blue dot ("Locate me")
+The crosshair button above the zoom buttons shows where you are on the plan, with a ring for how far off the GPS might be.
+- It asks the phone for its position, turns latitude/longitude into a map spot, smooths out the jumps, and draws the dot.
+- It also names the nearest entrance and offers a "Start there" button that sets "I'm entering from".
+- Outside the plan it says how far away you are instead. The plan only covers Stokes, so there is no outdoor map to draw the dot on yet.
+- GPS cannot tell floors apart, so the dot shows on Level 1 only. Floor detection (barometer) is a separate step.
+- Nothing is saved or sent anywhere. Location only works on an https page (or localhost), not when the file is opened straight from disk.
+
+**It needs calibrating before it works for real.** `window.GEO` in data.js is empty. Add 3 or 4 control points: spots on the plan whose
+real latitude/longitude you look up on a satellite map (Google Maps: right-click the building corner, click the numbers to copy).
+Pick corners far apart. These outside-wall corners from OUTLINES work well:
+- South wing, west end: x 61, y 364
+- South wing, north bump: x 1207, y 118
+- North wing, north-east corner: x 2280, y 680
+- North wing, south end: x 1975, y 1750
+
+Then add them like this, and run `node tests.js`. It reports how far the points miss on average and which one is probably a typo:
+`{"label": "South wing, west end", "x": 61, "y": 364, "lat": 0.0, "lng": 0.0}` (use the real numbers).
+The fitted scale also gives a real feet-per-unit. Once it looks right, compare it with SCALE (above) and fix that too.
+
+**Trying it without calibration:** open the page with `?sim=1` on the end, press the crosshair, then tap the map to place a pretend location.
+This tests the dot, the ring and the nearest-entrance prompt from a desk. Press the crosshair again to stop placing (the dot stays), or "Hide" to clear it.
+
 ## Floors (levels)
 - `window.LEVELS` in data.js lists the floors. Anything without a `"level"` is on Level 1.
 - Level 2 is a placeholder for now. It has the outside walls (dashed, copied from Level 1), the 5 staircases and
@@ -63,6 +86,7 @@ feetPerUnit to real feet divided by 1265. Then set "guess" to false. Time assume
 - Turn on "Show path network" to see the result. Then run `node tests.js`. It flags typos and doors too far from any hallway.
 
 ## Next steps
+0. Calibrate GPS (see "GPS blue dot" above), then walk around outside Stokes with the page on https and check the dot lands where you stand.
 1. Get real room numbers and door positions (the evacuation floor plans in the building should have them).
 2. Walk the building and fix the guesses listed above. Set "guess": false or "verified": true as you go.
 3. Test with ~5 freshmen against BC's map and log hours per building.
