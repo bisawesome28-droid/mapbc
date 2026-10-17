@@ -11,6 +11,39 @@
 - `node tests.js` checks every building of every school on its own (no data problems, GPS fit, every room reachable from every
   entrance, step-free where there is an elevator), so a new building file is tested without writing new tests.
 
+## Indoor blue dot: kept on the hallways (Oct 17, 2026)
+**Status: built and tested on simulated walks only. Not yet tried in a real building.** No real-world accuracy is known.
+- `core/snap.js` (pure, no page code; a native app can port it): inside a building with a floor plan, the dot is moved onto
+  the hallway lines of the floor showing, or into the room you have stopped in. It works from each building's data
+  (`paths`, `rooms`, `outlines`), nothing building-specific.
+- How it decides: each nearby piece of hallway has a chance of being where you are; the chance only moves ALONG the
+  hallways (a parallel hallway 6 m away is far by walking, so the dot does not flip to it); the dot changes hallway only
+  when the new one has clearly led for a moment. A hallway not connected to the dot's can still win, but only after the
+  readings point there for a long time (the escape hatch for a wrong first lock). Readings count for more when the phone
+  says they are accurate. Rooms win after several seconds inside one while your readings have stopped moving (walking
+  past a classroom does not pull the dot in). Far from every hallway, or outside the walls for a few seconds, the dot is
+  left alone. It never moves faster than 3 m/s. GPS cannot tell floors apart, so only the floor showing is used.
+- Honest limits: snapping fixes error ACROSS a hallway, not ALONG it. Where hallways are closer together than the GPS
+  error, no snapping can always pick the right one; this one settles on one instead of flipping. The location text says
+  so, and says when the hallway line is a guess.
+- The page (`web/app.js`, `snapYou`): after the existing smoothing, only within 30 m of a building with a floor plan.
+  Routing still uses the smoothed position; the outdoor dot is unchanged.
+- **Field test:** open the map with `?debug=1` (e.g. `.../mapbc/?debug=1`), press locate and walk. Grey dots are raw
+  readings, the orange ring is after smoothing, the blue dot is what people see; the panel says what the tracker decided.
+  At the end tap **Download log** (a CSV of every reading: raw, smoothed, dot, hallway or room, notes) and send it over.
+  To try other numbers on the spot: `?debug=1&snap=ROOM_ENTER:10,MAX_SPEED:2` (names and meanings: top of core/snap.js).
+- `?sim=1` (desk testing): press locate, then tap the map; the page sends a slightly jittery pretend reading every second
+  from that spot, through the same smoothing and snapping, so a far tap makes the dot walk there.
+- Motion later: `tracker.motion({ t, steps, heading })` exists and does nothing yet. A native app with a step counter can
+  start sending it; using it (e.g. "has stopped" for rooms, distance along a hallway) changes only core/snap.js.
+- Tests (`node tests.js`): made-up buildings for parallel hallways, standing in a room, walking past a room, far from any
+  path, other floors, just outside the walls, a corner, a GPS jump, poor vs good accuracy; plus simulated walks on every
+  real building, printing before/after numbers. `tools/snap_sim.js` makes the walks (assumed GPS error: a drifting offset
+  of about 4 m plus jitter). Simulated numbers at the time of writing: dot in a wall or nowhere walkable about 28% -> 5%
+  (Stokes), 13% -> 1% (McElroy), 33% -> 3% (O'Neill); sideways error 4.3 -> 3.5 m, 4.1 -> 3.6 m, 4.5 -> 4.5 m; straight-line
+  error about the same or slightly worse (6.6 -> 6.7, 6.8 -> 7.3, 6.7 -> 7.6 m), because steadiness costs a little and
+  nothing fixes error along a hallway. Tune on the real log, not on these.
+
 # BC Campus Map: handoff notes
 
 ## Read this first: how the map fits together (Oct 16, 2026)
@@ -165,6 +198,7 @@ Wi-Fi fingerprinting only works on Android (iOS blocks Wi-Fi scans). Beacons nee
 
 ## GPS blue dot ("Locate me")
 The crosshair button shows where you are, anywhere on campus, with a faint circle for how far off the GPS might be.
+- Inside a mapped building the dot is kept on the hallways: see "Indoor blue dot" at the top of this file.
 - It asks the phone for its position, smooths out the jumps, and draws the dot on the map.
 - It names the nearest entrance and offers "Start there". Or choose "My location (GPS)" in "Starting from" for a route from where you stand.
 - GPS cannot tell floors apart. Inside the building it is often off by 5 to 10 m.

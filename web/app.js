@@ -3,8 +3,8 @@
 // search from core/logic.js; floor plans as map shapes from core/indoor.js. This file is only the web screen around them,
 // so a native app reuses everything in core/ and the data, and rewrites only this part.
 (function () {
-  var ML = window.MapLogic, MI = window.MapIndoor, MS = window.MapSchool, STYLE = window.MapStyle;
-  var VERSION = '2026-10-16 v'; // bump when you publish a change, so you can see which copy of the page is running
+  var ML = window.MapLogic, MI = window.MapIndoor, MS = window.MapSchool, STYLE = window.MapStyle, MSNAP = window.MapSnap;
+  var VERSION = '2026-10-17 a'; // bump when you publish a change, so you can see which copy of the page is running
   var TYPES = {
     classroom: 'Classroom', office: 'Offices', service: 'Service center', it: 'IT suite',
     common: 'Common area', conf: 'Conference room', core: 'Stairs, elevators, restrooms',
@@ -118,6 +118,10 @@
     var openB = null; // the building whose inside is showing (zoomed in on it)
     var hoverKey = '';
     var SIM = readUrl().sim === '1'; // ?sim=1: tap the map to place a pretend location (no GPS needed)
+    var DEBUG = readUrl().debug === '1'; // ?debug=1: show the raw and snapped positions, and a "Download log" button
+    // ?debug=1&snap=ROOM_ENTER:10,MAX_SPEED:2 tries other snapping numbers (see core/snap.js) without changing the code.
+    var SNAP_OPTS = {};
+    if (DEBUG && readUrl().snap) { readUrl().snap.split(',').forEach(function (kv) { var q = kv.split(':'); if (q.length === 2 && !isNaN(+q[1])) { SNAP_OPTS[q[0]] = +q[1]; } }); }
     var FRAME = ML.localFrame(SCHOOL.center[1], SCHOOL.center[0]); // flat metres around the campus centre
 
     function lv(o) { return String(o.level == null ? '1' : o.level); }
@@ -370,6 +374,7 @@
         paint: { 'line-color': '#c0392b', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 20, 5], 'line-dasharray': [1, 1] } });
       map.addLayer({ id: 'you-acc', type: 'fill', source: 'you-acc', paint: { 'fill-color': '#0a6cff', 'fill-opacity': 0.12 } });
       map.addLayer({ id: 'you-acc-line', type: 'line', source: 'you-acc', paint: { 'line-color': '#0a6cff', 'line-opacity': 0.4, 'line-width': 1 } });
+      if (DEBUG) { map.addSource('dbg', { type: 'geojson', data: EMPTY }); }
       // The outdoor part of a route: solid along walkways, dashed when it is only a straight line.
       map.addLayer({ id: 'route-out-casing', type: 'line', source: 'route-out', layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#ffffff', 'line-width': 9, 'line-opacity': 0.9 } });
@@ -400,6 +405,10 @@
       LAYERS = STYLE.indoor(c, LAT);
       LAYERS.forEach(function (l) { map.addLayer(l, l.type === 'symbol' || l.type === 'circle' ? undefined : before); });
       indoorReady = true;
+      if (DEBUG) { // on top of everything: grey raw readings, orange ring after smoothing (the blue dot is a marker above)
+        map.addLayer({ id: 'dbg-raw', type: 'circle', source: 'dbg', filter: ['==', ['get', 'k'], 'raw'], paint: { 'circle-radius': 3.5, 'circle-color': '#6b7280', 'circle-opacity': 0.7 } });
+        map.addLayer({ id: 'dbg-smooth', type: 'circle', source: 'dbg', filter: ['==', ['get', 'k'], 'smooth'], paint: { 'circle-radius': 7, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#f08c00', 'circle-stroke-width': 3 } });
+      }
       map.on('mousemove', 'in-room', function (e) {
         var f = e.features && e.features[0], k = f ? f.properties.key : '';
         if (k !== hoverKey) { hoverKey = k; refreshIndoor(); }
@@ -608,7 +617,7 @@
     // A tap on the map: an entrance, a photo point or a room of the open floor plan, else a campus building.
     // MapLibre only sends "click" when the map was not dragged, so a pan never selects anything by accident.
     function onMapClick(e) {
-      if (SIM && locOn) { setYou({ lng: e.lngLat.lng, lat: e.lngLat.lat, accuracy: 8 }); return; }
+      if (SIM && locOn) { simAt = [e.lngLat.lng, e.lngLat.lat]; simTick(); return; }
       var ins = ['in-entr', 'in-spot', 'in-room'].filter(function (id) { return map.getLayer(id); });
       var hit = openB && ins.length ? map.queryRenderedFeatures(e.point, { layers: ins }) : [];
       for (var i = 0; i < hit.length; i++) {
@@ -694,7 +703,7 @@
         if (map.getSource('you-acc')) { map.getSource('you-acc').setData(EMPTY); }
         return;
       }
-      var ll = [you.lng, you.lat];
+      var ll = you.dot || [you.lng, you.lat]; // inside a building: the dot kept on the hallways (snapYou)
       if (!youMarker) {
         var dot = document.createElement('div');
         dot.className = 'you-dot-el';
@@ -935,6 +944,8 @@
       } else if (you) {
         var near = you.nearest && you.nearest.meters <= 250 ? you.nearest : null;
         text = you.inside ? 'You are in ' + you.b.name + (SIM ? ' (test location).' : ', within about ' + feetText(you.accuracyMeters) + '.')
+          + (you.snap && you.snap.mode === 'path' ? ' The dot keeps to the hallways; it can still be off along a hallway' + (you.snap.guess ? ', and this hallway line is a guess.' : '.') : '')
+          + (you.snap && you.snap.mode === 'room' ? ' The dot thinks you are in ' + you.snap.name + '.' : '')
                           : (you.b ? 'You are about ' + feetText(you.offMapMeters) + ' from ' + you.b.name + '.' : 'You are on the map.');
         if (near) {
           text += ' Nearest entrance: ' + near.name + ' (' + feetText(near.meters) + ').';
@@ -955,8 +966,10 @@
       }
     }
 
-    function setYou(pos) {
+    function setYou(pos, raw) {
       you = describeYou(pos);
+      snapYou(raw);
+      if (DEBUG) { debugFix(raw, pos); }
       locNote = null;
       drawYou(); renderLoc();
       // First good fix: show the dot (not every fix, or the map would fight your fingers).
@@ -973,11 +986,78 @@
     }
 
     function onFix(p) {
-      var c = p.coords, q = FRAME.toXY(c.latitude, c.longitude);
+      var c = p.coords, q = FRAME.toXY(c.latitude, c.longitude), t = p.timestamp || Date.now();
       // Treat a missing accuracy as poor, and never trust a reading to be better than 3 m.
-      var s = smoother.update(q.x, q.y, Math.max(c.accuracy || 25, 3), p.timestamp || Date.now());
+      var s = smoother.update(q.x, q.y, Math.max(c.accuracy || 25, 3), t);
       var g = FRAME.toLatLng(s.x, s.y);
-      setYou({ lng: g.lng, lat: g.lat, accuracy: s.acc });
+      setYou({ lng: g.lng, lat: g.lat, accuracy: s.acc }, { lng: c.longitude, lat: c.latitude, accuracy: c.accuracy || 25, t: t });
+    }
+
+    // ---------- Keeping the dot on the hallways inside a building (core/snap.js) ----------
+    // After the smoothing, and only in or near a building with a floor plan: the dot is moved onto the hallway lines (or
+    // into the room you have stopped in), on the floor showing for that building. Routing still uses the smoothed position;
+    // this only changes where the dot is drawn. Outdoors nothing changes.
+    var trackers = {}, snapIx = {};
+    function snapYou(raw) {
+      you.dot = null; you.snap = null;
+      if (!MSNAP || !you.b || you.b.parked || you.offMapMeters > 30) { if (you.b) { delete trackers[you.b.id]; } return; }
+      var b = you.b;
+      if (!snapIx[b.id]) { snapIx[b.id] = MSNAP.index(b); }
+      if (!trackers[b.id]) { trackers[b.id] = MSNAP.createTracker(snapIx[b.id], SNAP_OPTS); }
+      var pl = b.toPlan(you.lng, you.lat);
+      var o = trackers[b.id].update({ x: pl.x, y: pl.y, acc: raw ? raw.accuracy : you.accuracyMeters, t: raw ? raw.t : Date.now(), level: levelOf[b.id] });
+      you.dot = b.toLngLat(o.x, o.y); you.snap = o;
+    }
+    function resetSnap() { trackers = {}; }
+
+    // ---------- ?debug=1: what the dot is doing, and a log to download ----------
+    // Grey dots: the phone's raw readings (last minute). Orange ring: after smoothing. Blue: the dot as drawn.
+    // "Download log" saves every reading as a CSV file (it stays on the phone until you send it to someone).
+    var dbgLog = [], dbgTrail = [];
+    function csvCell(v) { var t = v == null ? '' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+    function debugFix(raw, pos) {
+      var o = you && you.snap, b = you && you.b, r6 = function (v) { return v == null ? '' : Math.round(v * 1e7) / 1e7; };
+      var dot = you && (you.dot || [you.lng, you.lat]);
+      var row = {
+        time: new Date(raw ? raw.t : Date.now()).toISOString(), sim: SIM ? 1 : 0, version: VERSION,
+        raw_lat: r6(raw && raw.lat), raw_lng: r6(raw && raw.lng), raw_acc_m: raw ? Math.round(raw.accuracy * 10) / 10 : '',
+        smooth_lat: r6(pos.lat), smooth_lng: r6(pos.lng), smooth_acc_m: Math.round(pos.accuracy * 10) / 10,
+        building: b ? b.id : '', level: b ? levelOf[b.id] : '', plan_box: you && you.inside ? 'in' : (b ? Math.round(you.offMapMeters) + ' m away' : ''),
+        mode: o ? o.mode : 'outdoors', on: o ? o.name : '', guess: o && o.guess ? 1 : 0, room: o ? o.room : '',
+        dot_lat: r6(dot && dot[1]), dot_lng: r6(dot && dot[0]),
+        dot_to_raw_m: raw && dot ? Math.round(metersBetween([raw.lng, raw.lat], dot) * 10) / 10 : '', note: o ? o.note : ''
+      };
+      dbgLog.push(row);
+      if (raw) { dbgTrail.push([raw.lng, raw.lat]); if (dbgTrail.length > 60) { dbgTrail.shift(); } }
+      if (map && map.getSource('dbg')) {
+        var fs = dbgTrail.map(function (c) { return { type: 'Feature', properties: { k: 'raw' }, geometry: { type: 'Point', coordinates: c } }; });
+        fs.push({ type: 'Feature', properties: { k: 'smooth' }, geometry: { type: 'Point', coordinates: [pos.lng, pos.lat] } });
+        map.getSource('dbg').setData({ type: 'FeatureCollection', features: fs });
+      }
+      var box = $('dbg');
+      if (box) {
+        box.querySelector('.st').textContent = (o ? (o.mode === 'path' ? 'On hallway: ' + (o.name || '?') + (o.guess ? ' (guessed line)' : '') : o.mode === 'room' ? 'In room: ' + o.name : 'Not snapped') : 'Outdoors: not snapped')
+          + ' | GPS ' + row.raw_acc_m + ' m | dot ' + row.dot_to_raw_m + ' m from reading' + (row.note ? ' | ' + row.note : '') + ' | ' + dbgLog.length + ' readings logged';
+      }
+    }
+    function debugDownload() {
+      if (!dbgLog.length) { return; }
+      var cols = Object.keys(dbgLog[0]);
+      var text = cols.join(',') + '\n' + dbgLog.map(function (r) { return cols.map(function (k) { return csvCell(r[k]); }).join(','); }).join('\n') + '\n';
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      a.download = 'mapbc-dot-log-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.csv';
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }
+    function debugPanel() {
+      var box = h('div', { 'class': 'dbgpanel glass', id: 'dbg', role: 'status' }, [
+        h('div', { 'class': 'st', text: 'Debug: press the locate button.' + (Object.keys(SNAP_OPTS).length ? ' Trying ' + JSON.stringify(SNAP_OPTS) + '.' : '') }),
+        h('div', { 'class': 'row' }, [h('button', { 'class': 'btn', type: 'button', id: 'dbgdl', text: 'Download log' }), h('button', { 'class': 'btn', type: 'button', id: 'dbgclr', text: 'Clear' })])
+      ]);
+      document.querySelector('.mapwrap').appendChild(box);
+      $('dbgdl').addEventListener('click', debugDownload);
+      $('dbgclr').addEventListener('click', function () { dbgLog = []; dbgTrail = []; if (map && map.getSource('dbg')) { map.getSource('dbg').setData(EMPTY); } box.querySelector('.st').textContent = 'Log cleared.'; });
     }
 
     function onLocError(err) {
@@ -992,10 +1072,22 @@
       renderLoc();
     }
 
+    // ?sim=1: pretend GPS readings around the last tapped spot (about 2.5 m of jitter, reported as 8 m accurate).
+    var simAt = null, simTimer = null, simSeed = 1;
+    function simRand() { simSeed = (simSeed * 16807) % 2147483647; return simSeed / 2147483647; }
+    function simTick() {
+      if (!simAt || !locOn) { return; }
+      var n = function () { return Math.sqrt(-2 * Math.log(simRand() || 1e-9)) * Math.cos(2 * Math.PI * simRand()) * 2.5; };
+      var f = ML.localFrame(simAt[1], simAt[0]), g = f.toLatLng(n(), n());
+      onFix({ coords: { latitude: g.lat, longitude: g.lng, accuracy: 8 }, timestamp: Date.now() });
+    }
+
     function stopLocate(clear) {
       if (watchId != null && navigator.geolocation) { navigator.geolocation.clearWatch(watchId); }
       watchId = null; locOn = false;
-      if (clear) { you = null; locNote = null; if (smoother) { smoother.reset(); } }
+      if (simTimer) { clearInterval(simTimer); simTimer = null; }
+      resetSnap();
+      if (clear) { you = null; locNote = null; simAt = null; if (smoother) { smoother.reset(); } }
       setLocBtn(); drawYou(); renderLoc();
     }
 
@@ -1003,6 +1095,9 @@
       if (locOn) { stopLocate(!SIM); return; }
       if (SIM) {
         locOn = true; setLocBtn();
+        smoother = ML.createSmoother({ speed: 1.4 });
+        // A tap means "I am standing here": like a phone, send a slightly jittery reading every second.
+        simTimer = setInterval(simTick, 1000);
         locNote = you ? null : { kind: 'info', text: 'Test mode: tap the map to place a pretend location.' };
         renderLoc();
         return;
@@ -1012,7 +1107,7 @@
         renderLoc();
         return;
       }
-      locOn = true; centered = false; you = null;
+      locOn = true; centered = false; you = null; resetSnap();
       smoother = ML.createSmoother({ speed: 1.4 }); // walking pace, in metres per second
       locNote = { kind: 'info', text: 'Finding your location...' };
       setLocBtn(); renderLoc();
@@ -1564,6 +1659,7 @@
     if (s0) { sel = { kind: 'spot', o: s0 }; }
     if (sel) { input.value = titleOf(sel); }
     $('legend').style.display = 'none';
+    if (DEBUG) { debugPanel(); }
     renderFloors(); renderHeader();
     // The map draws its labels with the Inter font, so load it first (at most a second and a half; if it is slow or
     // missing, labels use the phone's own font).
