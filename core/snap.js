@@ -104,7 +104,7 @@
       if (r.stair || r.cars || !r.shape || r.shape.length < 3) { return; } // you walk through stairs and elevators
       var F = L(lv(r)), cx = 0, cy = 0;
       r.shape.forEach(function (q) { cx += q[0] / r.shape.length; cy += q[1] / r.shape.length; });
-      var room = { id: r.id, name: r.name || r.id, shape: r.shape, cx: cx, cy: cy, segs: [], guess: !!r.useGuess };
+      var room = { id: r.id, name: r.door ? r.door + ' (' + (r.name || 'room') + ')' : (r.name || r.id), shape: r.shape, cx: cx, cy: cy, segs: [], guess: !!r.useGuess };
       // The hallways its doors open onto: the dot can only come into the room from there.
       (r.doors || []).forEach(function (d) {
         var best = null;
