@@ -678,6 +678,130 @@ test('O\'Neill opens on Level 3 (its main floor)', function () {
   assert.ok(b.levels.some(function (l) { return l.id === '3'; }));
 });
 
+// ---------- Indoor blue dot: snapping to hallways (core/snap.js) ----------
+// Made-up buildings and simulated noisy walks (tools/snap_sim.js). These check the behaviour, not real-world accuracy:
+// only a walk with a phone can tell that.
+var MSNAP = require('./core/snap.js');
+var SIM = require('./tools/snap_sim.js');
+// A test building, 20 plan units to a metre. halls: [[name, [[x,y] metres...]]] joined where points meet.
+function testBuilding(halls, rooms, outline, level) {
+  var nodes = [], edges = [], key = {};
+  function node(p) { var k = p.join(','); if (!key[k]) { key[k] = 'n' + nodes.length; nodes.push({ id: key[k], x: p[0] * 20, y: p[1] * 20, level: level || '1', name: '' }); } return key[k]; }
+  halls.forEach(function (h) { for (var i = 1; i < h[1].length; i++) { edges.push({ from: node(h[1][i - 1]), to: node(h[1][i]) }); nodes.forEach(function (n) { if (!n.name) { n.name = h[0]; } }); } });
+  return { unitsPerMeter: 20, paths: { nodes: nodes, edges: edges },
+    rooms: (rooms || []).map(function (r) { return { id: r[0], name: r[0], level: level || '1', shape: r[1].map(function (q) { return [q[0] * 20, q[1] * 20]; }), doors: [[r[2][0] * 20, r[2][1] * 20]] }; }),
+    outlines: [{ level: level || '1', points: (outline || [[-20, -20], [140, -20], [140, 60], [-20, 60]]).map(function (q) { return [q[0] * 20, q[1] * 20]; }) }] };
+}
+// Feeds metre positions (one a second) through smoothing and snapping like the page does. noise: snap_sim noise options.
+function feed(b, pts, noise, level, opts) {
+  var ix = MSNAP.index(b), truth = pts.map(function (p, i) { return { x: p[0] * 20, y: p[1] * 20, t: i * 1000 }; });
+  var rd = noise ? SIM.noisy(truth, 20, noise) : truth.map(function (p) { return { x: p.x, y: p.y, acc: 8, t: p.t }; });
+  if (noise && noise.accFixed) { rd.forEach(function (q) { q.acc = noise.accFixed; }); }
+  var sm = ML.createSmoother({ speed: 1.4 * 20 }), tr = MSNAP.createTracker(ix, opts);
+  return { ix: ix, out: rd.map(function (q) { var s = sm.update(q.x, q.y, Math.max(q.acc, 3) * 20, q.t); return tr.update({ x: s.x, y: s.y, acc: q.acc, t: q.t, level: level || '1' }); }) };
+}
+function walkLine(a, b, secs) { var out = []; for (var i = 0; i < secs; i++) { out.push([a[0] + (b[0] - a[0]) * i / secs, a[1] + (b[1] - a[1]) * i / secs]); } return out; }
+function standAt(p, secs) { var out = []; for (var i = 0; i < secs; i++) { out.push(p); } return out; }
+
+test('snap: two parallel hallways 6 m apart: the dot does not flip between them (compared with a plain nearest snap)', function () {
+  var b = testBuilding([['A', [[0, 0], [120, 0]]], ['B', [[0, 6], [120, 6]]], ['West link', [[0, 0], [0, 6]]], ['East link', [[120, 0], [120, 6]]]]);
+  var wrong = 0, flips = 0, nWrong = 0, nFlips = 0;
+  for (var seed = 1; seed <= 6; seed++) {
+    var r = feed(b, walkLine([5, 0], [115, 0], 85), { seed: seed, bias: 3, jitter: 1.5 }), last = null, nLast = null;
+    r.out.slice(5).forEach(function (o) {
+      var onB = o.mode === 'path' && Math.abs(o.target.y - 120) < 1, nB = o.raw.y > 60; // nearest snap: whichever is closer
+      if (onB) { wrong++; } if (nB) { nWrong++; }
+      if (last !== null && onB !== last) { flips++; } if (nLast !== null && nB !== nLast) { nFlips++; }
+      last = onB; nLast = nB;
+    });
+  }
+  // With GPS drifting 3 m for a minute at a time, no snapping can always tell hallways 6 m apart. The point is that the
+  // dot settles instead of flipping, and is not wrong more often than the simplest snap.
+  assert.ok(flips <= 6 && flips * 2 <= nFlips, 'switched ' + flips + ' times in 6 walks (plain nearest snap: ' + nFlips + ')');
+  assert.ok(wrong <= nWrong + 24, 'on the wrong hallway ' + wrong + ' readings (plain nearest snap: ' + nWrong + ')');
+});
+
+test('snap: standing in a classroom puts the dot in the room; walking past it does not', function () {
+  var room = ['Classroom', [[40, 2], [52, 2], [52, 14], [40, 14]], [46, 2]];
+  var b = testBuilding([['Hall', [[0, 0], [120, 0]]]], [room]);
+  var r = feed(b, walkLine([10, 0], [46, 0], 28).concat(walkLine([46, 0], [46, 8], 6)).concat(standAt([46, 8], 60)), { seed: 4, bias: 2, jitter: 1.5 });
+  var tail = r.out.slice(-30), inRoom = tail.filter(function (o) { return o.mode === 'room'; }).length;
+  assert.ok(inRoom >= 27, 'in the room ' + inRoom + ' of the last 30 s');
+  var past = 0;
+  for (var seed = 1; seed <= 6; seed++) { feed(b, walkLine([5, 0], [115, 0], 85), { seed: seed, bias: 3, jitter: 1.5 }).out.forEach(function (o) { if (o.mode === 'room') { past++; } }); }
+  assert.ok(past / (6 * 85) < 0.05, 'walking past, the dot went into the room ' + Math.round(100 * past / 510) + '% of the time');
+});
+
+test('snap: far from every hallway, and on a floor with no hallways, the dot is left alone', function () {
+  var b = testBuilding([['Hall', [[0, 0], [120, 0]]]], [], [[-20, -20], [140, -20], [140, 60], [-20, 60]]);
+  var far = feed(b, standAt([60, 40], 20));
+  assert.ok(far.out.slice(3).every(function (o) { return o.mode === 'free'; }), 'snapped although 40 m from the hallway');
+  assert.ok(Math.abs(far.out[19].x - 60 * 20) < 1 && Math.abs(far.out[19].y - 40 * 20) < 1);
+  var up = feed(b, standAt([60, 1], 20), null, '2'); // the hallway is on level 1; the floor showing is 2
+  assert.ok(up.out.every(function (o) { return o.mode === 'free'; }), 'snapped to another floor');
+  // Changing floor starts again on the new floor.
+  var ix = MSNAP.index(b), tr = MSNAP.createTracker(ix), o;
+  for (var t = 0; t < 6; t++) { o = tr.update({ x: 1200, y: 30, acc: 6, t: t * 1000, level: '1' }); }
+  assert.strictEqual(o.mode, 'path');
+  o = tr.update({ x: 1200, y: 30, acc: 6, t: 6000, level: '2' });
+  assert.strictEqual(o.mode, 'free');
+});
+
+test('snap: near a building but outside it, the dot is not pulled in', function () {
+  var b = testBuilding([['Hall', [[0, 2], [120, 2]]]], [], [[-2, -2], [122, -2], [122, 6], [-2, 6]]);
+  var r = feed(b, walkLine([5, -9], [115, -9], 80), { seed: 2, bias: 1.5, jitter: 1 }); // walking 7 m outside the wall
+  var snapped = r.out.filter(function (o) { return o.mode !== 'free'; }).length;
+  assert.ok(snapped / 80 < 0.1, 'snapped ' + snapped + ' of 80 readings taken outside');
+});
+
+test('snap: turning a corner, the dot follows onto the new hallway', function () {
+  var b = testBuilding([['East-west hall', [[0, 0], [50, 0]]], ['North-south hall', [[50, 0], [50, 50]]], ['Dead end', [[50, 0], [70, 0]]]]);
+  var r = feed(b, walkLine([5, 0], [50, 0], 35).concat(walkLine([50, 0], [50, 45], 35)), { seed: 5, bias: 2, jitter: 1.5 });
+  var after = r.out.slice(-25), onNS = after.filter(function (o) { return o.mode === 'path' && Math.abs(o.target.x - 1000) < 1; }).length;
+  assert.ok(onNS >= 22, 'on the new hallway ' + onNS + ' of the last 25 s');
+});
+
+test('snap: the dot never jumps, even when GPS does; poor readings count for less', function () {
+  var b = testBuilding([['A', [[0, 0], [120, 0]]], ['B', [[0, 6], [120, 6]]], ['Link', [[0, 0], [0, 6]]]]);
+  var ix = MSNAP.index(b), tr = MSNAP.createTracker(ix), o, prev = null, worst = 0;
+  var pts = standAt([60, 0], 10).concat(standAt([60, 60], 4)).concat(standAt([60, 0], 10)); // a 60 m GPS jump for 4 s
+  pts.forEach(function (p, i) { o = tr.update({ x: p[0] * 20, y: p[1] * 20, acc: 8, t: i * 1000, level: '1' }); if (prev) { worst = Math.max(worst, Math.hypot(o.x - prev.x, o.y - prev.y) / 20); } prev = o; });
+  assert.ok(worst <= MSNAP.defaults.MAX_SPEED + 0.01, 'moved ' + worst.toFixed(1) + ' m in one second');
+  // Readings on hallway B: inaccurate ones (25 m) do not move the dot off A; accurate ones (3 m), for long enough, do.
+  function run(acc) {
+    var t2 = MSNAP.createTracker(ix), q;
+    for (var i = 0; i < 8; i++) { q = t2.update({ x: 600, y: 0, acc: 4, t: i * 1000, level: '1' }); }
+    for (var j = 8; j < 30; j++) { q = t2.update({ x: 600, y: 120, acc: acc, t: j * 1000, level: '1' }); }
+    return Math.abs(q.target.y - 120) < 1 ? 'B' : 'A';
+  }
+  assert.strictEqual(run(25), 'A');
+  assert.strictEqual(run(3), 'B');
+});
+
+test('snap: motion() can be called now and changes nothing yet', function () {
+  var b = testBuilding([['Hall', [[0, 0], [120, 0]]]]), ix = MSNAP.index(b);
+  var a = MSNAP.createTracker(ix), c = MSNAP.createTracker(ix), oa, oc;
+  for (var i = 0; i < 10; i++) {
+    c.motion({ t: i * 1000, steps: i, heading: 90 });
+    oa = a.update({ x: 600 + i * 26, y: 40, acc: 6, t: i * 1000, level: '1' }); oc = c.update({ x: 600 + i * 26, y: 40, acc: 6, t: i * 1000, level: '1' });
+  }
+  assert.deepStrictEqual(oa, oc);
+});
+
+// Before and after, on every real building: simulated walks along each floor's hallways with assumed indoor GPS error
+// (a drifting offset of about 4 m plus jitter). Made-up walks: these numbers are not real-world accuracy.
+SCHOOLS.forEach(function (sc) {
+  sc.buildings.forEach(function (b) {
+    test(sc.school.id + '/' + b.id + ': snapping keeps the simulated dot out of walls and closer to the right hallway', function () {
+      var x = SIM.building(b, { walks: 4 }), f = function (s) { return 'average ' + s.mean.toFixed(1) + ' m, sideways ' + s.side.toFixed(1) + ' m, in a wall ' + Math.round(s.offWalk * 100) + '%'; };
+      console.log('      ' + x.walks + ' simulated walks. Before: ' + f(x.before) + '. After: ' + f(x.after) + '.');
+      assert.ok(x.after.offWalk < x.before.offWalk / 2, 'in a wall: before ' + x.before.offWalk.toFixed(2) + ', after ' + x.after.offWalk.toFixed(2));
+      assert.ok(x.after.side <= x.before.side * 1.05, 'sideways error got worse');
+      assert.ok(x.after.maxStep <= MSNAP.defaults.MAX_SPEED + 0.01, 'the dot jumped ' + x.after.maxStep.toFixed(1) + ' m in a second');
+    });
+  });
+});
+
 // Every building of every school: these run for each new building file without anyone adding a test.
 SCHOOLS.forEach(function (sc) {
   sc.buildings.forEach(function (b) {
