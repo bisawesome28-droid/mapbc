@@ -51,3 +51,8 @@ step-free routes from using that door; `"guess": true` means not checked on site
 the map colours each kind (colours: `CATEGORIES` in `core/style.js`, the same for every school). A building not listed stays
 tan. A building with a floor plan also gets a thin outline in the school's colour. `node tests.js` reports a name that is not
 a building in the campus data.
+
+## What the indoor blue dot uses
+`core/snap.js` reads only `paths` (hallway lines on one floor; `stair`, `elevator` and `outdoor` edges are skipped),
+`rooms` (shape and doors; stairs and elevators are not rooms to stand in) and `outlines` (the walls). Better-traced hallways
+and doors make the dot better; nothing else is needed per building.
